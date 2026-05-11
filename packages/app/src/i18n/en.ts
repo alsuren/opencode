@@ -635,14 +635,14 @@ export const dict = {
   "error.chain.configInvalid": "Config file at {{path}} is invalid",
   "error.chain.configInvalidWithMessage": "Config file at {{path}} is invalid: {{message}}",
 
-  "notification.permission.title": "Permission required",
+  "notification.permission.title": "⚠️ Permission required",
   "notification.permission.description": "{{sessionTitle}} in {{projectName}} needs permission",
   "notification.question.title": "Question",
   "notification.question.description": "{{sessionTitle}} in {{projectName}} has a question",
   "notification.action.goToSession": "Go to session",
 
-  "notification.session.responseReady.title": "Response ready",
-  "notification.session.error.title": "Session error",
+  "notification.session.responseReady.title": "✅ Response ready",
+  "notification.session.error.title": "❌ Session error",
   "notification.session.error.fallbackDescription": "An error occurred",
 
   "home.recentProjects": "Recent projects",
