@@ -83,7 +83,7 @@ const ProjectTile = (props: {
     props
       .dirs()
       .filter((directory) => notification.project.unseenCount(directory) > 0)
-      .forEach((directory) => notification.project.markViewed(directory))
+      .forEach((directory) => notification.project.markViewed(directory, "sidebar-project-clear"))
 
   return (
     <ContextMenu

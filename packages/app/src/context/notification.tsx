@@ -195,14 +195,14 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
         unseen: (session: string) => selected().session.unseen(session),
         unseenCount: (session: string) => selected().session.unseenCount(session),
         unseenHasError: (session: string) => selected().session.unseenHasError(session),
-        markViewed: (session: string) => selected().session.markViewed(session),
+        markViewed: (session: string, source?: string) => selected().session.markViewed(session, source),
       },
       project: {
         all: (directory: string) => selected().project.all(directory),
         unseen: (directory: string) => selected().project.unseen(directory),
         unseenCount: (directory: string) => selected().project.unseenCount(directory),
         unseenHasError: (directory: string) => selected().project.unseenHasError(directory),
-        markViewed: (directory: string) => selected().project.markViewed(directory),
+        markViewed: (directory: string, source?: string) => selected().project.markViewed(directory, source),
       },
     }
   },
@@ -428,13 +428,29 @@ function createServerNotificationState(input: {
       unseenHasError(session: string) {
         return index.session.unseenHasError[session] ?? false
       },
-      markViewed(session: string) {
+      markViewed(session: string, source: string = "unknown") {
         const unseen = index.session.unseen[session] ?? empty
         if (!unseen.length) return
 
         const projects = [
           ...new Set(unseen.flatMap((notification) => (notification.directory ? [notification.directory] : []))),
         ]
+        const extra = {
+          source,
+          session,
+          count: unseen.length,
+          types: unseen.map((n) => n.type),
+          projects,
+        }
+        console.debug("[notification] session.markViewed", extra)
+        void serverSDK().client.app
+          .log({
+            service: "app-notification",
+            level: "info",
+            message: "session.markViewed",
+            extra,
+          })
+          .catch(() => {})
         batch(() => {
           setStore("list", (n) => n.session === session && !n.viewed, "viewed", true)
           updateUnseen("session", session, [])
@@ -460,13 +476,29 @@ function createServerNotificationState(input: {
       unseenHasError(directory: string) {
         return index.project.unseenHasError[directory] ?? false
       },
-      markViewed(directory: string) {
+      markViewed(directory: string, source: string = "unknown") {
         const unseen = index.project.unseen[directory] ?? empty
         if (!unseen.length) return
 
         const sessions = [
           ...new Set(unseen.flatMap((notification) => (notification.session ? [notification.session] : []))),
         ]
+        const extra = {
+          source,
+          directory,
+          count: unseen.length,
+          types: unseen.map((n) => n.type),
+          sessions,
+        }
+        console.debug("[notification] project.markViewed", extra)
+        void serverSDK().client.app
+          .log({
+            service: "app-notification",
+            level: "info",
+            message: "project.markViewed",
+            extra,
+          })
+          .catch(() => {})
         batch(() => {
           setStore("list", (n) => n.directory === directory && !n.viewed, "viewed", true)
           updateUnseen("project", directory, [])

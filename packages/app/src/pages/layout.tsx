@@ -44,6 +44,7 @@ import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
+
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
@@ -116,6 +117,7 @@ export default function LegacyLayout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const navigate = useNavigate()
+
   const providers = useProviders(() => undefined)
   const dialog = useDialog()
   const command = useCommand()
@@ -378,8 +380,22 @@ export default function LegacyLayout(props: ParentProps) {
       const alertedAtBySession = new Map<string, number>()
       const cooldownMs = 5000
 
-      const dismissSessionAlert = (sessionKey: string) => {
+      const serverLog = (message: string, extra: Record<string, unknown>) => {
+        console.debug(`[notification-toast] ${message}`, extra)
+        void serverSDK.client.app
+          .log({ service: "app-notification-toast", level: "info", message, extra })
+          .catch(() => {})
+      }
+
+      const dismissSessionAlert = (sessionKey: string, source: string) => {
         const toastId = toastBySession.get(sessionKey)
+        serverLog("dismissSessionAlert", {
+          source,
+          sessionKey,
+          toastId: toastId ?? null,
+          hadToast: toastId !== undefined,
+          knownToasts: Array.from(toastBySession.keys()),
+        })
         if (toastId === undefined) return
         dismissToast(toastId)
         toastBySession.delete(sessionKey)
@@ -410,7 +426,13 @@ export default function LegacyLayout(props: ParentProps) {
         ) {
           const props = e.details.properties as { sessionID: string }
           const sessionKey = `${e.name}:${props.sessionID}`
-          dismissSessionAlert(sessionKey)
+          serverLog("sdk event resolves alert", {
+            eventType: e.details.type,
+            directory: e.name,
+            sessionID: props.sessionID,
+            sessionKey,
+          })
+          dismissSessionAlert(sessionKey, `event:${e.details.type}`)
           return
         }
 
@@ -422,7 +444,13 @@ export default function LegacyLayout(props: ParentProps) {
         const icon = e.details.type === "permission.asked" ? ("checklist" as const) : ("bubble-5" as const)
         const directory = e.name
         const props = e.details.properties
-        if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) return
+        if (e.details.type === "permission.asked" && permission.autoResponds(e.details.properties, directory)) {
+          serverLog("permission.asked auto-responded — toast suppressed", {
+            directory,
+            sessionID: (props as { sessionID?: string }).sessionID,
+          })
+          return
+        }
 
         const [store] = serverSync().child(directory, { bootstrap: false })
         const session = store.session.find((s) => s.id === props.sessionID)
@@ -438,7 +466,15 @@ export default function LegacyLayout(props: ParentProps) {
 
         const now = Date.now()
         const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
-        if (now - lastAlerted < cooldownMs) return
+        if (now - lastAlerted < cooldownMs) {
+          serverLog("ask event suppressed by cooldown", {
+            eventType: e.details.type,
+            sessionKey,
+            sinceLastAlertMs: now - lastAlerted,
+            cooldownMs,
+          })
+          return
+        }
         alertedAtBySession.set(sessionKey, now)
 
         if (e.details.type === "permission.asked") {
@@ -457,10 +493,25 @@ export default function LegacyLayout(props: ParentProps) {
         }
 
         const currentSession = params.id
-        if (pathKey(directory) === pathKey(currentDir()) && props.sessionID === currentSession) return
-        if (pathKey(directory) === pathKey(currentDir()) && session?.parentID === currentSession) return
+        if (pathKey(directory) === pathKey(currentDir()) && props.sessionID === currentSession) {
+          serverLog("ask event in active session — toast skipped", {
+            eventType: e.details.type,
+            sessionKey,
+            currentSession,
+          })
+          return
+        }
+        if (pathKey(directory) === pathKey(currentDir()) && session?.parentID === currentSession) {
+          serverLog("ask event in active session's child — toast skipped", {
+            eventType: e.details.type,
+            sessionKey,
+            currentSession,
+            parentID: session?.parentID,
+          })
+          return
+        }
 
-        dismissSessionAlert(sessionKey)
+        dismissSessionAlert(sessionKey, "pre-new-toast")
 
         const toastId = showToast({
           persistent: true,
@@ -479,6 +530,12 @@ export default function LegacyLayout(props: ParentProps) {
           ],
         })
         toastBySession.set(sessionKey, toastId)
+        serverLog("toast shown", {
+          eventType: e.details.type,
+          sessionKey,
+          toastId,
+          title,
+        })
       })
       onCleanup(unsub)
 
@@ -486,11 +543,11 @@ export default function LegacyLayout(props: ParentProps) {
         const currentSession = params.id
         if (!currentDir() || !currentSession) return
         const sessionKey = `${currentDir()}:${currentSession}`
-        dismissSessionAlert(sessionKey)
+        dismissSessionAlert(sessionKey, "route-effect")
         const [store] = serverSync().child(currentDir(), { bootstrap: false })
         const childSessions = store.session.filter((s) => s.parentID === currentSession)
         for (const child of childSessions) {
-          dismissSessionAlert(`${currentDir()}:${child.id}`)
+          dismissSessionAlert(`${currentDir()}:${child.id}`, "route-effect-child")
         }
       })
     })
@@ -1162,7 +1219,7 @@ export default function LegacyLayout(props: ParentProps) {
 
   function syncSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
     rememberSessionRoute(directory, id, root)
-    notification.session.markViewed(id)
+    notification.session.markViewed(id, "navigation")
     const expanded = untrack(() => store.workspaceExpanded[directory])
     if (expanded === false) {
       setStore("workspaceExpanded", directory, true)
@@ -1959,7 +2016,7 @@ export default function LegacyLayout(props: ParentProps) {
     const clearNotifications = () =>
       workspaces()
         .filter((directory) => notification.project.unseenCount(directory) > 0)
-        .forEach((directory) => notification.project.markViewed(directory))
+        .forEach((directory) => notification.project.markViewed(directory, "project-panel-clear"))
     const workspacesEnabled = createMemo(() => {
       const item = project()
       if (!item) return false
