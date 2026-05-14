@@ -67,17 +67,27 @@ const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
+      const combined: PermissionV1.Rule[] = [...ruleset, ...approved]
       let needsAsk = false
+      const evaluations: PermissionV1.PatternEvaluation[] = []
 
       for (const pattern of request.patterns) {
-        const rule = evaluate(request.permission, pattern, ruleset, approved)
-        yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
-        if (rule.action === "deny") {
+        // Inline findLast because we need to know whether a real rule matched
+        // (to expose it in the UI's per-pattern detail row) vs falling back
+        // to the synthetic "ask" default.  evaluate() collapses those two
+        // cases so we can't reuse it here.
+        const matched = combined.findLast(
+          (rule) => Wildcard.match(request.permission, rule.permission) && Wildcard.match(pattern, rule.pattern),
+        )
+        const action: PermissionV1.Action = matched?.action ?? "ask"
+        yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action, rule: matched })
+        if (action === "deny") {
           return yield* new PermissionV1.DeniedError({
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
           })
         }
-        if (rule.action === "allow") continue
+        evaluations.push(matched ? { pattern, action, rule: matched } : { pattern, action })
+        if (action === "allow") continue
         needsAsk = true
       }
 
@@ -89,6 +99,7 @@ const layer = Layer.effect(
         sessionID: request.sessionID,
         permission: request.permission,
         patterns: request.patterns,
+        evaluations,
         metadata: request.metadata,
         always: request.always,
         tool: request.tool,

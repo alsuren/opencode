@@ -149,6 +149,12 @@ export type MoveSessionError = {
   }
 }
 
+export type PermissionPatternEvaluation = {
+  pattern: string
+  action: PermissionAction
+  rule?: PermissionRule
+}
+
 export type SnapshotFileDiff = {
   file?: string
   patch?: string
@@ -2470,6 +2476,7 @@ export type PermissionRequest = {
   sessionID: string
   permission: string
   patterns: Array<string>
+  evaluations?: Array<PermissionPatternEvaluation>
   metadata: {
     [key: string]: unknown
   }

@@ -24,11 +24,19 @@ export type Rule = typeof Rule.Type
 export const Ruleset = Schema.Array(Rule).annotate({ identifier: "PermissionRuleset" })
 export type Ruleset = typeof Ruleset.Type
 
+export const PatternEvaluation = Schema.Struct({
+  pattern: Schema.String,
+  action: Action,
+  rule: Schema.optional(Rule),
+}).annotate({ identifier: "PermissionPatternEvaluation" })
+export type PatternEvaluation = typeof PatternEvaluation.Type
+
 export const Request = Schema.Struct({
   id: ID,
   sessionID: SessionID,
   permission: Schema.String,
   patterns: Schema.Array(Schema.String),
+  evaluations: Schema.optional(Schema.Array(PatternEvaluation)),
   metadata: Schema.Record(Schema.String, Schema.Unknown),
   always: Schema.Array(Schema.String),
   tool: Schema.optional(Schema.Struct({ messageID: Schema.String, callID: Schema.String })),

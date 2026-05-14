@@ -1146,6 +1146,77 @@ it.instance(
 )
 
 it.instance(
+  "ask - request evaluations include matched rule for ask patterns",
+  () =>
+    Effect.gen(function* () {
+      const askRule = { permission: "bash", pattern: "echo *", action: "ask" as const }
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["echo hello"],
+        metadata: {},
+        always: ["echo *"],
+        ruleset: [askRule],
+      }).pipe(Effect.forkScoped)
+
+      const items = yield* waitForPending(1)
+      expect(items[0].evaluations).toEqual([{ pattern: "echo hello", action: "ask", rule: askRule }])
+
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - request evaluations omit rule when no rule matches (default ask)",
+  () =>
+    Effect.gen(function* () {
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["unknown-cmd"],
+        metadata: {},
+        always: ["unknown-cmd *"],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const items = yield* waitForPending(1)
+      expect(items[0].evaluations).toEqual([{ pattern: "unknown-cmd", action: "ask" }])
+
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - request evaluations include allow-matched patterns alongside ask patterns",
+  () =>
+    Effect.gen(function* () {
+      const allowRule = { permission: "bash", pattern: "echo *", action: "allow" as const }
+      const fiber = yield* ask({
+        sessionID: SessionID.make("session_test"),
+        permission: "bash",
+        patterns: ["echo hello", "rm -rf /tmp/foo"],
+        metadata: {},
+        always: ["echo *", "rm *"],
+        ruleset: [allowRule],
+      }).pipe(Effect.forkScoped)
+
+      const items = yield* waitForPending(1)
+      expect(items[0].evaluations).toEqual([
+        { pattern: "echo hello", action: "allow", rule: allowRule },
+        { pattern: "rm -rf /tmp/foo", action: "ask" },
+      ])
+
+      yield* rejectAll()
+      yield* Fiber.await(fiber)
+    }),
+  { git: true },
+)
+
+it.instance(
   "ask - abort should clear pending request",
   () =>
     Effect.gen(function* () {

@@ -191,6 +191,11 @@ export const dict: Record<string, string> = {
   "ui.permission.deny": "Deny",
   "ui.permission.allowAlways": "Allow always",
   "ui.permission.allowOnce": "Allow once",
+  "ui.permission.matchingRule": "Matched rule:",
+  "ui.permission.noMatchingRule": "No matching rule (default: ask)",
+  "ui.permission.copyCommand": "Copy command",
+  "ui.permission.copied": "Copied to clipboard",
+  "ui.permission.copyFailed": "Copy failed",
 
   "ui.message.expand": "Expand message",
   "ui.message.collapse": "Collapse message",
