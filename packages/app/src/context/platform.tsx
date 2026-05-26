@@ -2,6 +2,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "../desktop-menu"
+import type { NotifyKind } from "@/utils/notify"
 import { ServerConnection } from "./server"
 import type { WslServersPlatform } from "../wsl/types"
 import type { UpdaterPlatform } from "../updater"
@@ -47,8 +48,23 @@ type PlatformBase = {
   /** Restart the app  */
   restart(): Promise<void>
 
-  /** Send a system notification */
-  notify(title: string, description?: string, onClick?: () => void): Promise<void>
+  /**
+   * Send a system notification (optional deep link).
+   *
+   * `meta.kind` + `meta.sessionID` are used by web (service-worker) builds to
+   * tag the notification so {@link dismissNotificationsForSession} can later
+   * find and dismiss it from the OS Notification Center.  Desktop builds
+   * currently ignore meta.
+   */
+  notify(title: string, description?: string, href?: string, meta?: { kind: NotifyKind; sessionID?: string }): Promise<void>
+
+  /**
+   * Web only: dismiss every system notification tied to a session.  Called
+   * when the user navigates to that session so stale "Response ready" /
+   * "Permission required" notifications drop out of macOS Notification
+   * Center.  Returns the number of notifications closed.
+   */
+  dismissNotificationsForSession?(sessionID: string): Promise<number>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?(

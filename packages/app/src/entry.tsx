@@ -8,6 +8,14 @@ import { type Platform, PlatformProvider } from "@/context/platform"
 import { createBrowserDraftStore } from "@/utils/draft-store"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
+import { handleNotificationClick } from "@/utils/notification-click"
+import {
+  dismissForSession as swDismissForSession,
+  ensurePermission,
+  type Logger as NotifyLogger,
+  register as swRegister,
+  show as swShow,
+} from "@/utils/notify"
 import { authFromToken } from "@/utils/server"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
@@ -55,29 +63,99 @@ const setStorage = (key: string, value: string | null) => {
 const readDefaultServerUrl = () => getStorage(DEFAULT_SERVER_URL_KEY)
 const writeDefaultServerUrl = (url: string | null) => setStorage(DEFAULT_SERVER_URL_KEY, url)
 
-const notify: Platform["notify"] = async (title, description, onClick) => {
-  if (!("Notification" in window)) return
+// Forward web-notification lifecycle events to the opencode server log so an
+// agent can debug "why didn't this notification show up / clear?" without
+// opening DevTools.  See packages/app/src/utils/notify.ts for the rest of
+// the lifecycle.  Falls back to console only if /log is unreachable.
+const swLogger: NotifyLogger = (level, message, extra) => {
+  // eslint-disable-next-line no-console
+  console[level === "warn" ? "warn" : "log"]("[notify-sw]", message, extra ?? {})
+  try {
+    void fetch("/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // level=info because the server's default log level filters out debug.
+      body: JSON.stringify({
+        service: "app-notification-sw-client",
+        level: level === "warn" ? "warn" : "info",
+        message,
+        extra: extra ?? {},
+      }),
+      keepalive: true,
+    }).catch(() => {})
+  } catch {}
+}
 
-  const permission =
-    Notification.permission === "default"
-      ? await Notification.requestPermission().catch(() => "denied")
-      : Notification.permission
-
-  if (permission !== "granted") return
-
-  const inView = document.visibilityState === "visible" && document.hasFocus()
-  if (inView) return
-
-  const notification = new Notification(title, {
-    body: description ?? "",
-    icon: "https://opencode.ai/favicon-96x96-v3.png",
+// Listen for messages from the SW (e.g. "you should client-side route to X").
+if (typeof navigator !== "undefined" && navigator.serviceWorker) {
+  navigator.serviceWorker.addEventListener("message", (event) => {
+    const msg = event.data
+    if (msg && msg.type === "notification-click" && typeof msg.href === "string") {
+      swLogger("info", "client received notification-click from sw", { href: msg.href, tag: msg.tag })
+      handleNotificationClick(msg.href)
+    }
   })
+}
 
-  notification.onclick = () => {
-    window.focus()
-    onClick?.()
-    notification.close()
+// Register the SW eagerly so the first session.idle event after page load
+// can use it.  We hold the registration as a module-level singleton because
+// every platform.notify call needs it.
+let swRegistration: ServiceWorkerRegistration | null = null
+const swReady: Promise<ServiceWorkerRegistration | null> =
+  typeof window === "undefined"
+    ? Promise.resolve(null)
+    : swRegister("/sw.js", "/", swLogger).then((reg) => {
+        swRegistration = reg
+        return reg
+      })
+
+const notify: Platform["notify"] = async (title, description, href, meta) => {
+  const inView = document.visibilityState === "visible" && document.hasFocus()
+  if (inView) {
+    swLogger("info", "notify skipped — tab in view", {
+      title,
+      kind: meta?.kind ?? null,
+      sessionID: meta?.sessionID ?? null,
+    })
+    return
   }
+
+  const permission = await ensurePermission(swLogger)
+  if (permission !== "granted") {
+    swLogger("warn", "notify skipped — permission not granted", { permission, title })
+    return
+  }
+
+  const reg = swRegistration ?? (await swReady)
+  if (!reg) {
+    swLogger("warn", "notify skipped — no service worker registration", { title })
+    return
+  }
+
+  // `meta` is optional for backwards compatibility with desktop callers that
+  // predate the SW migration.  When absent we fall back to a kind that won't
+  // collide with any real session-tagged notification.
+  const kind = meta?.kind ?? "session-idle"
+  await swShow(
+    reg,
+    {
+      kind,
+      sessionID: meta?.sessionID,
+      title,
+      body: description,
+      href,
+    },
+    swLogger,
+  )
+}
+
+const dismissNotificationsForSession: NonNullable<Platform["dismissNotificationsForSession"]> = async (sessionID) => {
+  const reg = swRegistration ?? (await swReady)
+  if (!reg) {
+    swLogger("warn", "dismissNotificationsForSession skipped — no service worker registration", { sessionID })
+    return 0
+  }
+  return swDismissForSession(reg, sessionID, swLogger)
 }
 
 const openExternal: Platform["openExternal"] = (value) => {
@@ -123,6 +201,7 @@ const platform: Platform = {
   openExternal,
   restart,
   notify,
+  dismissNotificationsForSession,
   getDefaultServer: async () => {
     const stored = readDefaultServerUrl()
     return stored ? ServerConnection.Key.make(stored) : null

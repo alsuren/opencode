@@ -44,7 +44,11 @@ import { Binary } from "@opencode-ai/core/util/binary"
 import { retry } from "@opencode-ai/core/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
-
+import {
+  setNavigate,
+  setServerLogger as setNotificationClickServerLogger,
+  wasRecentlyTriggeredByNotificationClick,
+} from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
@@ -117,7 +121,12 @@ export default function LegacyLayout(props: ParentProps) {
   const notification = useNotification()
   const permission = usePermission()
   const navigate = useNavigate()
-
+  setNavigate(navigate)
+  setNotificationClickServerLogger((message, extra) => {
+    void serverSDK.client.app
+      .log({ service: "app-notification", level: "info", message, extra })
+      .catch(() => {})
+  })
   const providers = useProviders(() => undefined)
   const dialog = useDialog()
   const command = useCommand()
@@ -482,13 +491,13 @@ export default function LegacyLayout(props: ParentProps) {
             void playSoundById(settings.sounds.permissions())
           }
           if (settings.notifications.permissions()) {
-            void platform.notify(title, description, () => navigate(href))
+            void platform.notify(title, description, href, { kind: "permission", sessionID: props.sessionID })
           }
         }
 
         if (e.details.type === "question.asked") {
           if (settings.notifications.agent()) {
-            void platform.notify(title, description, () => navigate(href))
+            void platform.notify(title, description, href, { kind: "question", sessionID: props.sessionID })
           }
         }
 
@@ -1219,7 +1228,41 @@ export default function LegacyLayout(props: ParentProps) {
 
   function syncSessionRoute(directory: string, id: string, root = activeProjectRoot(directory)) {
     rememberSessionRoute(directory, id, root)
-    notification.session.markViewed(id, "navigation")
+    const source = wasRecentlyTriggeredByNotificationClick() ? "os-notification-click" : "navigation"
+    const extra = { source, directory, id, root }
+    console.debug("[notification] syncSessionRoute", extra)
+    void serverSDK.client.app
+      .log({ service: "app-notification", level: "info", message: "syncSessionRoute", extra })
+      .catch(() => {})
+    // Dismiss any system notifications still parked in the OS Notification
+    // Center for this session.  We don't `await` because navigation should
+    // not be blocked by SW round-trips; the SDK log call above is similarly
+    // fire-and-forget.
+    if (platform.dismissNotificationsForSession) {
+      void platform
+        .dismissNotificationsForSession(id)
+        .then((count) =>
+          void serverSDK.client.app
+            .log({
+              service: "app-notification",
+              level: "info",
+              message: "dismissNotificationsForSession result",
+              extra: { sessionID: id, source, dismissed: count },
+            })
+            .catch(() => {}),
+        )
+        .catch((err) =>
+          void serverSDK.client.app
+            .log({
+              service: "app-notification",
+              level: "warn",
+              message: "dismissNotificationsForSession threw",
+              extra: { sessionID: id, source, error: String(err) },
+            })
+            .catch(() => {}),
+        )
+    }
+    notification.session.markViewed(id, source)
     const expanded = untrack(() => store.workspaceExpanded[directory])
     if (expanded === false) {
       setStore("workspaceExpanded", directory, true)
