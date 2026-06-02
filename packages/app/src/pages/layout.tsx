@@ -563,6 +563,46 @@ export default function LegacyLayout(props: ParentProps) {
 
   useSDKNotificationToasts()
 
+  // Dismiss OS notifications for the current session when the window
+  // regains focus.  Covers the alt-tab-into-browser case where the user
+  // is already on the relevant session: syncSessionRoute doesn't fire
+  // (no route change) so the dismiss-on-navigate path never runs.
+  // Listening to `focus` rather than `visibilitychange` because alt-tab
+  // between OS windows doesn't always flip visibilityState (the tab is
+  // still considered visible, just not focused).
+  onMount(() => {
+    const onFocus = () => {
+      const id = params.id
+      const directory = currentDir()
+      if (!id || !directory) return
+      if (!platform.dismissNotificationsForSession) return
+      void platform
+        .dismissNotificationsForSession(id)
+        .then((count) =>
+          void serverSDK.client.app
+            .log({
+              service: "app-notification",
+              level: "info",
+              message: "dismissNotificationsForSession result",
+              extra: { sessionID: id, source: "window-focus", dismissed: count },
+            })
+            .catch(() => {}),
+        )
+        .catch((err) =>
+          void serverSDK.client.app
+            .log({
+              service: "app-notification",
+              level: "warn",
+              message: "dismissNotificationsForSession threw",
+              extra: { sessionID: id, source: "window-focus", error: String(err) },
+            })
+            .catch(() => {}),
+        )
+    }
+    window.addEventListener("focus", onFocus)
+    onCleanup(() => window.removeEventListener("focus", onFocus))
+  })
+
   function scrollToSession(sessionId: string, sessionKey: string) {
     if (!scrollContainerRef) return
     if (state.scrollSessionKey === sessionKey) return
