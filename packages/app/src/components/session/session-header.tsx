@@ -16,10 +16,13 @@ import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
+import { usePermission } from "@/context/permission"
 import { useServer } from "@/context/server"
 import { useSettings } from "@/context/settings"
+import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
+import { sessionPermissionRequest, sessionQuestionRequest } from "@/pages/session/composer/session-request-tree"
 import { focusTerminalById } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
@@ -142,8 +145,10 @@ export function SessionHeader() {
   const command = useCommand()
   const server = useServer()
   const platform = usePlatform()
+  const permission = usePermission()
   const language = useLanguage()
   const settings = useSettings()
+  const sdk = useSDK()
   const sync = useSync()
   const terminal = useTerminal()
   const { params, view } = useSessionLayout()
@@ -231,9 +236,18 @@ export function SessionHeader() {
       ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
   )
   const opening = createMemo(() => openRequest.app !== undefined)
-  const tint = createMemo(() =>
+  const awaitingAction = createMemo(() => {
+    if (!params.id) return false
+    const perm = sessionPermissionRequest(sync().data.session, sync().data.permission, params.id, (item) => {
+      return !permission.autoResponds(item, sdk().directory)
+    })
+    if (perm) return true
+    return !!sessionQuestionRequest(sync().data.session, sync().data.question, params.id)
+  })
+  const agentTint = createMemo(() =>
     messageAgentColor(params.id ? sync().data.message[params.id] : undefined, sync().data.agent),
   )
+  const tint = createMemo(() => (awaitingAction() ? "var(--icon-warning-base)" : agentTint()))
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
     statusLabel: language.t("status.popover.trigger"),
