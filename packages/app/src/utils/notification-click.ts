@@ -24,3 +24,22 @@ export const handleNotificationClick = (href?: string) => {
 
 export const wasRecentlyTriggeredByNotificationClick = () =>
   Date.now() - lastClickAt < RECENT_CLICK_WINDOW_MS
+
+// Action returned from the SW notification-click message router.  Caller is
+// responsible for actually executing it (focus / navigate).  Exposed as a
+// pure function purely for testability — the production caller wires it up
+// to `window.focus()` and `handleNotificationClick` respectively.
+export type SwClickMessage = { type: "notification-click"; href: string; tag?: string | null; sameUrl?: boolean }
+export type SwClickAction =
+  | { kind: "ignore"; reason: string }
+  | { kind: "focus-only"; href: string }
+  | { kind: "navigate"; href: string }
+
+export const planSwClickAction = (msg: unknown): SwClickAction => {
+  if (!msg || typeof msg !== "object") return { kind: "ignore", reason: "non-object message" }
+  const m = msg as Partial<SwClickMessage>
+  if (m.type !== "notification-click") return { kind: "ignore", reason: "wrong message type" }
+  if (typeof m.href !== "string") return { kind: "ignore", reason: "href not a string" }
+  if (m.sameUrl === true) return { kind: "focus-only", href: m.href }
+  return { kind: "navigate", href: m.href }
+}

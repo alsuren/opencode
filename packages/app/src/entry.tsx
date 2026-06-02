@@ -8,7 +8,7 @@ import { type Platform, PlatformProvider } from "@/context/platform"
 import { createBrowserDraftStore } from "@/utils/draft-store"
 import { dict as en } from "@/i18n/en"
 import { dict as zh } from "@/i18n/zh"
-import { handleNotificationClick } from "@/utils/notification-click"
+import { handleNotificationClick, planSwClickAction } from "@/utils/notification-click"
 import {
   dismissForSession as swDismissForSession,
   ensurePermission,
@@ -89,11 +89,21 @@ const swLogger: NotifyLogger = (level, message, extra) => {
 // Listen for messages from the SW (e.g. "you should client-side route to X").
 if (typeof navigator !== "undefined" && navigator.serviceWorker) {
   navigator.serviceWorker.addEventListener("message", (event) => {
-    const msg = event.data
-    if (msg && msg.type === "notification-click" && typeof msg.href === "string") {
-      swLogger("info", "client received notification-click from sw", { href: msg.href, tag: msg.tag })
-      handleNotificationClick(msg.href)
+    const action = planSwClickAction(event.data)
+    swLogger("info", "client received message from sw", {
+      kind: action.kind,
+      ...(action.kind === "ignore" ? { reason: action.reason } : { href: action.href }),
+    })
+    if (action.kind === "focus-only") {
+      // Already on the right page — just focus the window.  Calling
+      // navigate(href, href) can re-fire SPA effects in some routers and
+      // SW client.navigate() would do a full document reload.
+      try {
+        window.focus()
+      } catch {}
+      return
     }
+    if (action.kind === "navigate") handleNotificationClick(action.href)
   })
 }
 

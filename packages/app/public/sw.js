@@ -55,35 +55,53 @@ self.addEventListener("notificationclick", (event) => {
 
   if (!href) return
 
-  // Focus an existing window on the same origin if we have one, otherwise
-  // open a new one.  We always navigate it to the href.
+  // We always prefer postMessage on an existing client — the page-side
+  // handler routes via the SPA router (no reload).  client.navigate() is a
+  // last-resort fallback because, even when the target URL matches the
+  // current one, it triggers a full document reload that wipes session
+  // state.  See https://developer.mozilla.org/en-US/docs/Web/API/WindowClient/navigate
   event.waitUntil(
     (async () => {
       const url = new URL(href, SCOPE).toString()
       try {
         const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true })
-        for (const client of clients) {
-          if (!("focus" in client)) continue
-          try {
-            await client.focus()
-          } catch {}
-          if ("navigate" in client && typeof client.navigate === "function") {
+        if (clients.length > 0) {
+          // Pick the most-recently-focused window (matchAll returns them in
+          // most-recent-first order) and route the click there.
+          const target = clients[0]
+          const sameUrl = target.url === url
+          log("info", "notificationclick routing to existing client", {
+            clients: clients.length,
+            targetUrl: target.url,
+            href,
+            sameUrl,
+          })
+          if ("focus" in target) {
             try {
-              await client.navigate(url)
-              return
-            } catch {
-              // navigate() can throw if the client isn't same-origin or has been
-              // controlled-navigated-away; fall through to openWindow.
-            }
+              await target.focus()
+            } catch {}
           }
-          // If we can't navigate the existing client, post a message so the
-          // page can do client-side routing if it wants to.
           try {
-            client.postMessage({ type: "notification-click", href, tag: notification.tag || null })
+            target.postMessage({ type: "notification-click", href, tag: notification.tag || null, sameUrl })
             return
-          } catch {}
+          } catch (err) {
+            log("warn", "notificationclick postMessage failed", { error: String(err) })
+          }
+          // postMessage shouldn't fail, but if it did fall back to navigate
+          // for cross-URL cases only.  Same-URL fallthrough would just
+          // reload the page for no benefit.
+          if (!sameUrl && "navigate" in target && typeof target.navigate === "function") {
+            try {
+              await target.navigate(url)
+              log("info", "notificationclick fell back to client.navigate")
+              return
+            } catch {}
+          }
+          return
         }
+        // No existing window — open one.
         if (self.clients.openWindow) {
+          log("info", "notificationclick opening new window", { href })
           await self.clients.openWindow(url)
         }
       } catch (err) {
