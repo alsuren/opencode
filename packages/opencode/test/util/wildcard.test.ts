@@ -79,6 +79,28 @@ test("match normalizes slashes for cross-platform globbing", () => {
   expect(Wildcard.match("C:/Windows/System32/drivers", "C:\\Windows\\System32\\*")).toBe(true)
 })
 
+test("match handles <arg> as a single-token wildcard", () => {
+  // basic single-arg matching
+  expect(Wildcard.match("timeout 20 npx vitest", "timeout <arg> npx vitest")).toBe(true)
+  expect(Wildcard.match("timeout 20 npx vitest run", "timeout <arg> npx vitest *")).toBe(true)
+  expect(Wildcard.match("sudo -u root apt-get install foo", "sudo <arg> <arg> apt-get install *")).toBe(true)
+  expect(Wildcard.match("sudo apt-get install foo", "sudo apt-get install *")).toBe(true)
+
+  // <arg> must match at least one character
+  expect(Wildcard.match("timeout  npx vitest", "timeout <arg> npx vitest")).toBe(false)
+
+  // <arg> must not cross spaces
+  expect(Wildcard.match("timeout 20 30 npx vitest", "timeout <arg> npx vitest")).toBe(false)
+
+  // multiple <arg> tokens compose
+  expect(Wildcard.match("git commit -m foo", "git commit <arg> <arg>")).toBe(true)
+  expect(Wildcard.match("git commit -m foo bar", "git commit <arg> <arg>")).toBe(false)
+
+  // <arg> next to other tokens
+  expect(Wildcard.match("npm run build --watch", "npm run <arg> *")).toBe(true)
+  expect(Wildcard.match("npm run build", "npm run <arg> *")).toBe(true)
+})
+
 test("match handles case-insensitivity on Windows", () => {
   if (process.platform === "win32") {
     expect(Wildcard.match("C:\\windows\\system32\\hosts", "C:/Windows/System32/*")).toBe(true)

@@ -1,12 +1,19 @@
 import { sortBy, pipe } from "remeda"
 
+// Sentinel used so that the literal text "<arg>" in a user pattern can be
+// translated into a single-token wildcard without colliding with regex
+// metachar escaping done in the same pass.
+const ARG_TOKEN = "\x00ARG\x00"
+
 export function match(str: string, pattern: string) {
   if (str) str = str.replaceAll("\\", "/")
   if (pattern) pattern = pattern.replaceAll("\\", "/")
   let escaped = pattern
+    .replaceAll("<arg>", ARG_TOKEN) // stash before escaping
     .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
     .replace(/\*/g, ".*") // * becomes .*
     .replace(/\?/g, ".") // ? becomes .
+    .replaceAll(ARG_TOKEN, "[^ ]+") // <arg> matches one non-space token
 
   // If pattern ends with " *" (space + wildcard), make the trailing part optional
   // This allows "ls *" to match both "ls" and "ls -la"
