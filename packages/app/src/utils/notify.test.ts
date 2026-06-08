@@ -4,6 +4,8 @@ import {
   dismissForSession,
   ensurePermission,
   register,
+  sessionIDFromPathname,
+  shouldShowNotification,
   show,
   tagFor,
   type Logger,
@@ -374,5 +376,89 @@ describe("ensurePermission", () => {
     const out = await ensurePermission(log)
     expect(out).toBe("denied")
     expect(entries.some((e) => e.level === "warn" && e.message === "requestPermission threw")).toBe(true)
+  })
+})
+
+describe("sessionIDFromPathname", () => {
+  test("extracts sessionID from a session route", () => {
+    expect(sessionIDFromPathname("/Lw==/session/ses_abc123")).toBe("ses_abc123")
+  })
+
+  test("handles trailing path segments", () => {
+    expect(sessionIDFromPathname("/Lw==/session/ses_abc123/review")).toBe("ses_abc123")
+  })
+
+  test("returns undefined for non-session routes", () => {
+    expect(sessionIDFromPathname("/")).toBeUndefined()
+    expect(sessionIDFromPathname("/Lw==/")).toBeUndefined()
+    expect(sessionIDFromPathname("/Lw==/session")).toBeUndefined()
+    expect(sessionIDFromPathname("/Lw==/session/")).toBeUndefined()
+    expect(sessionIDFromPathname("/settings")).toBeUndefined()
+  })
+})
+
+describe("shouldShowNotification", () => {
+  test("shows when tab is not visible regardless of session match", () => {
+    expect(
+      shouldShowNotification({
+        visible: false,
+        notifySessionID: "ses_a",
+        currentSessionID: "ses_a",
+      }),
+    ).toEqual({ show: true, reason: "tab-not-visible" })
+    expect(
+      shouldShowNotification({
+        visible: false,
+        notifySessionID: undefined,
+        currentSessionID: undefined,
+      }),
+    ).toEqual({ show: true, reason: "tab-not-visible" })
+  })
+
+  test("suppresses when tab is visible AND user is on the same session", () => {
+    expect(
+      shouldShowNotification({
+        visible: true,
+        notifySessionID: "ses_a",
+        currentSessionID: "ses_a",
+      }),
+    ).toEqual({ show: false, reason: "on-same-session" })
+  })
+
+  test("SHOWS when tab is visible but user is on a different session — fixes cross-session-while-focused bug", () => {
+    expect(
+      shouldShowNotification({
+        visible: true,
+        notifySessionID: "ses_b",
+        currentSessionID: "ses_a",
+      }),
+    ).toEqual({ show: true, reason: "different-session" })
+  })
+
+  test("SHOWS when tab is visible and user is not on any session", () => {
+    expect(
+      shouldShowNotification({
+        visible: true,
+        notifySessionID: "ses_b",
+        currentSessionID: undefined,
+      }),
+    ).toEqual({ show: true, reason: "different-session" })
+  })
+
+  test("suppresses when tab is visible and notification has no sessionID (conservative fallback)", () => {
+    expect(
+      shouldShowNotification({
+        visible: true,
+        notifySessionID: undefined,
+        currentSessionID: "ses_a",
+      }),
+    ).toEqual({ show: false, reason: "no-session-id-fallback" })
+    expect(
+      shouldShowNotification({
+        visible: true,
+        notifySessionID: undefined,
+        currentSessionID: undefined,
+      }),
+    ).toEqual({ show: false, reason: "no-session-id-fallback" })
   })
 })

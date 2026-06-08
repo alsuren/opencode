@@ -37,6 +37,54 @@ export type NotificationLike = {
 export const tagFor = (kind: NotifyKind, sessionID: string | undefined) =>
   sessionID ? `${kind}:${sessionID}` : kind
 
+/**
+ * Extract the sessionID from a route pathname.  Returns `undefined` when
+ * the path is not a session route.  Stable URL shape:
+ *   `/<base64-dir>/session/<sessionID>[/...]`.
+ */
+export const sessionIDFromPathname = (pathname: string): string | undefined => {
+  const segments = pathname.split("/")
+  const i = segments.indexOf("session")
+  if (i === -1) return undefined
+  const sid = segments[i + 1]
+  return sid && sid.length > 0 ? sid : undefined
+}
+
+export type ShouldShowInput = {
+  visible: boolean
+  notifySessionID: string | undefined
+  currentSessionID: string | undefined
+}
+
+export type ShouldShowDecision =
+  | { show: false; reason: "on-same-session" | "no-session-id-fallback" }
+  | { show: true; reason: "tab-not-visible" | "different-session" }
+
+/**
+ * Decide whether to actually fire an OS notification given current
+ * focus/visibility state, the notification's sessionID, and the
+ * current route's sessionID.
+ *
+ * Rules:
+ *   - If the tab is not visible/focused, always show.
+ *   - If the tab is visible AND the notification refers to the session
+ *     the user is currently looking at, suppress (user has already seen
+ *     the event).
+ *   - If the tab is visible but we don't know the notification's
+ *     sessionID, suppress conservatively — without that info we can't
+ *     tell whether the user has seen the event, and previous behaviour
+ *     was to suppress in this case.
+ *   - Otherwise (visible, different session) → show.  This is the fix
+ *     for "background tab needs permission while another opencode tab
+ *     is focused" — the notification is the only signal the user has.
+ */
+export const shouldShowNotification = (input: ShouldShowInput): ShouldShowDecision => {
+  if (!input.visible) return { show: true, reason: "tab-not-visible" }
+  if (!input.notifySessionID) return { show: false, reason: "no-session-id-fallback" }
+  if (input.notifySessionID === input.currentSessionID) return { show: false, reason: "on-same-session" }
+  return { show: true, reason: "different-session" }
+}
+
 // The ServiceWorker NotificationOptions surface (which includes `renotify`,
 // `actions`, etc.) is not modelled in lib.dom.d.ts as part of the plain
 // NotificationOptions; rather than juggling type augmentations we widen the

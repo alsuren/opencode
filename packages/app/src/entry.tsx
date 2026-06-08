@@ -14,6 +14,8 @@ import {
   ensurePermission,
   type Logger as NotifyLogger,
   register as swRegister,
+  sessionIDFromPathname,
+  shouldShowNotification,
   show as swShow,
 } from "@/utils/notify"
 import { authFromToken } from "@/utils/server"
@@ -120,14 +122,32 @@ const swReady: Promise<ServiceWorkerRegistration | null> =
       })
 
 const notify: Platform["notify"] = async (title, description, href, meta) => {
-  const inView = document.visibilityState === "visible" && document.hasFocus()
-  if (inView) {
+  const visible = document.visibilityState === "visible" && document.hasFocus()
+  const currentSessionID = sessionIDFromPathname(location.pathname)
+  const decision = shouldShowNotification({
+    visible,
+    notifySessionID: meta?.sessionID,
+    currentSessionID,
+  })
+  if (!decision.show) {
     swLogger("info", "notify skipped — tab in view", {
       title,
       kind: meta?.kind ?? null,
       sessionID: meta?.sessionID ?? null,
+      currentSessionID: currentSessionID ?? null,
+      reason: decision.reason,
     })
     return
+  }
+  if (visible) {
+    // Tab is in view but the notification is for a different session;
+    // fire it so the user knows a background session needs attention.
+    swLogger("info", "notify firing despite tab in view — different session", {
+      title,
+      kind: meta?.kind ?? null,
+      sessionID: meta?.sessionID ?? null,
+      currentSessionID: currentSessionID ?? null,
+    })
   }
 
   const permission = await ensurePermission(swLogger)
