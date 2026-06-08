@@ -1,6 +1,7 @@
 [data-component="toast-region"] {
   position: fixed;
-  top: 48px;
+  /* Clears the session header (context gauge + menu) which sits around 48px tall. */
+  top: 68px;
   inset-inline-end: 32px;
   z-index: 1000;
   display: flex;
