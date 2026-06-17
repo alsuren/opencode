@@ -419,6 +419,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     )
   }
 
+  // dlaban-undo: experimental, easy to remove (delete this block + the
+  // sessionCommand registration below + components/dialog-dlaban-undo.tsx)
+  const dlabanUndo = () => {
+    void import("@/components/dialog-dlaban-undo").then((x) => {
+      dialog.show(() => <x.DialogDlabanUndo />)
+    })
+  }
+  // end dlaban-undo
+
   const shareCmds = () => {
     if (sync().data.config.share === "disabled") return []
     return [
@@ -497,6 +506,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       disabled: !params.id,
       onSelect: exportSession,
     }),
+    // dlaban-undo: experimental, easy to remove
+    sessionCommand({
+      id: "session.dlaban-undo",
+      title: "Undo to question",
+      description: "Rewind to a previous question and prefill the composer without submitting",
+      slash: "dlaban-undo",
+      disabled: !params.id || visibleUserMessages().length === 0,
+      onSelect: dlabanUndo,
+    }),
+    // end dlaban-undo
   ]
 
   const fileCmds = () => {
