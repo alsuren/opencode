@@ -123,7 +123,7 @@ export default function LegacyLayout(props: ParentProps) {
   const navigate = useNavigate()
   setNavigate(navigate)
   setNotificationClickServerLogger((message, extra) => {
-    void serverSDK.client.app
+    void serverSDK().client.app
       .log({ service: "app-notification", level: "info", message, extra })
       .catch(() => {})
   })
@@ -391,7 +391,7 @@ export default function LegacyLayout(props: ParentProps) {
 
       const serverLog = (message: string, extra: Record<string, unknown>) => {
         console.debug(`[notification-toast] ${message}`, extra)
-        void serverSDK.client.app
+        void serverSDK().client.app
           .log({ service: "app-notification-toast", level: "info", message, extra })
           .catch(() => {})
       }
@@ -579,7 +579,7 @@ export default function LegacyLayout(props: ParentProps) {
       void platform
         .dismissNotificationsForSession(id)
         .then((count) =>
-          void serverSDK.client.app
+          void serverSDK().client.app
             .log({
               service: "app-notification",
               level: "info",
@@ -589,7 +589,7 @@ export default function LegacyLayout(props: ParentProps) {
             .catch(() => {}),
         )
         .catch((err) =>
-          void serverSDK.client.app
+          void serverSDK().client.app
             .log({
               service: "app-notification",
               level: "warn",
@@ -1271,7 +1271,7 @@ export default function LegacyLayout(props: ParentProps) {
     const source = wasRecentlyTriggeredByNotificationClick() ? "os-notification-click" : "navigation"
     const extra = { source, directory, id, root }
     console.debug("[notification] syncSessionRoute", extra)
-    void serverSDK.client.app
+    void serverSDK().client.app
       .log({ service: "app-notification", level: "info", message: "syncSessionRoute", extra })
       .catch(() => {})
     // Dismiss any system notifications still parked in the OS Notification
@@ -1282,7 +1282,7 @@ export default function LegacyLayout(props: ParentProps) {
       void platform
         .dismissNotificationsForSession(id)
         .then((count) =>
-          void serverSDK.client.app
+          void serverSDK().client.app
             .log({
               service: "app-notification",
               level: "info",
@@ -1292,7 +1292,7 @@ export default function LegacyLayout(props: ParentProps) {
             .catch(() => {}),
         )
         .catch((err) =>
-          void serverSDK.client.app
+          void serverSDK().client.app
             .log({
               service: "app-notification",
               level: "warn",
