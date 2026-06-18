@@ -32,6 +32,11 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { encodeMermaidSource, hydrateMermaidBlocks, teardownMermaidBlocks } from "@opencode-ai/ui/mermaid"
+
+function mermaidPlaceholderHtml(source: string) {
+  return `<div data-component="mermaid-block" data-source="${encodeMermaidSource(source)}"></div>`
+}
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -236,7 +241,7 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   }
 }
 
-function markCodeLinks(root: HTMLDivElement) {
+function markCodeLinks(root: HTMLElement) {
   const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
   for (const code of codeNodes) {
     const href = codeUrl(code.textContent ?? "")
@@ -434,6 +439,20 @@ export function Markdown(
           const blockKey = markdownBlockKey(owner, src.key, index, block.mode)
 
           if (block.mode === "code") {
+            // Mermaid blocks bypass the syntax-highlighter worker entirely,
+            // BUT only once the fence has closed. While the diagram is still
+            // streaming we render it as ordinary syntax-highlighted source so
+            // mermaid doesn't choke on half-written DSL.
+            if (block.language === "mermaid" && block.complete) {
+              const html = mermaidPlaceholderHtml(block.src)
+              return {
+                key: blockKey,
+                mode: "full" as const,
+                raw: block.raw,
+                hash: checksum(block.raw) ?? String(block.raw.length),
+                html,
+              }
+            }
             const cached = completedCode.get(blockKey)
             if (block.complete && cached?.raw === block.raw) return cached
             const result = await code(block.src, block.language, blockKey, block.complete)
@@ -530,6 +549,11 @@ export function Markdown(
         copy: i18n.t("ui.message.copy"),
         copied: i18n.t("ui.message.copied"),
       }))
+
+    // Lazy-hydrate any pending mermaid placeholders. Skips ones already
+    // marked data-hydrated. The mermaid library is dynamically imported so
+    // it only loads when a diagram actually appears.
+    hydrateMermaidBlocks(container)
   })
 
   onCleanup(() => {
@@ -537,6 +561,8 @@ export function Markdown(
     disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
+    const container = root()
+    if (container) teardownMermaidBlocks(container)
   })
 
   return (
@@ -568,6 +594,18 @@ function pendingBlocks(
     const key = markdownBlockKey(owner, cacheKey, index, block.mode)
     if (block.mode !== "code")
       return { key, mode: block.mode, raw: block.raw, hash: String(block.raw.length), html: fallback(block.src) }
+    // Mermaid blocks only swap to the rendered SVG once the fence has
+    // closed. While streaming they keep rendering as a plain code block so
+    // mermaid never sees half-baked DSL.
+    if (block.language === "mermaid" && block.complete) {
+      return {
+        key,
+        mode: "full" as const,
+        raw: block.raw,
+        hash: String(block.raw.length),
+        html: mermaidPlaceholderHtml(block.src),
+      }
+    }
     return {
       key,
       mode: block.mode,
