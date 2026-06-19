@@ -34,15 +34,26 @@ export interface ProjectAvatarProps extends ComponentProps<"div"> {
   src?: string
   variant?: ProjectAvatarStyle
   unread?: boolean
+  awaiting?: boolean
 }
 
 export function ProjectAvatar(props: ProjectAvatarProps) {
-  const [split, rest] = splitProps(props, ["fallback", "src", "variant", "unread", "class", "classList", "style"])
+  const [split, rest] = splitProps(props, [
+    "fallback",
+    "src",
+    "variant",
+    "unread",
+    "awaiting",
+    "class",
+    "classList",
+    "style",
+  ])
   return (
     <div
       {...rest}
       data-component="project-avatar-v2"
       data-unread={split.unread ? "" : undefined}
+      data-awaiting={split.awaiting ? "" : undefined}
       classList={{
         ...split.classList,
         [split.class ?? ""]: !!split.class,
