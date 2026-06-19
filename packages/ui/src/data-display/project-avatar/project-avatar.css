@@ -92,6 +92,11 @@
   background: var(--project-avatar-bg);
 }
 
+[data-component="project-avatar-v2"][data-awaiting] {
+  border-radius: 4px;
+  box-shadow: 0 0 0 1.5px var(--icon-warning-base);
+}
+
 [data-slot="project-avatar-surface"] [data-slot="project-avatar-image"] {
   position: relative;
   display: block;
