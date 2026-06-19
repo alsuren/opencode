@@ -26,6 +26,7 @@ export function SessionTabAvatar(props: {
       revealProjectOnHover={props.revealProjectOnHover}
       unread={state.unread()}
       loading={state.loading()}
+      awaiting={state.awaiting()}
     />
   )
 }
@@ -36,6 +37,7 @@ export function SessionTabAvatarView(props: {
   revealProjectOnHover?: boolean
   unread: boolean
   loading: boolean
+  awaiting?: boolean
 }) {
   const projectAvatar = () => (
     <ProjectAvatar
@@ -43,6 +45,7 @@ export function SessionTabAvatarView(props: {
       src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
       variant={getProjectAvatarVariant(props.project?.icon?.color)}
       unread={props.unread}
+      awaiting={props.awaiting}
     />
   )
   return (
