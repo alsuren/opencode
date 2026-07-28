@@ -1,7 +1,8 @@
-import { For, Show } from "solid-js"
+import { createSignal, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { PermissionPatternEvaluation, PermissionRequest, PermissionRule } from "@opencode-ai/sdk/v2"
 import { Button } from "@opencode-ai/ui/button"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -33,11 +34,24 @@ export function SessionPermissionDock(props: {
 }) {
   const language = useLanguage()
   const [expanded, setExpanded] = createStore<Record<number, boolean>>({})
+  const [patternsOpen, setPatternsOpen] = createSignal(true)
 
   const toolDescription = () => {
     const key = `settings.permissions.tool.${props.request.permission}.description`
     const value = language.t(key as Parameters<typeof language.t>[0])
     if (value === key) return ""
+    return value
+  }
+
+  // Falls back to the tool title, then the raw permission id, so the
+  // disclosure summary always has a label even for permissions that don't
+  // have a description string (e.g. custom plugin-defined permissions).
+  const toolLabel = () => {
+    const description = toolDescription()
+    if (description) return description
+    const key = `settings.permissions.tool.${props.request.permission}.title`
+    const value = language.t(key as Parameters<typeof language.t>[0])
+    if (value === key) return props.request.permission
     return value
   }
 
@@ -100,80 +114,97 @@ export function SessionPermissionDock(props: {
         </>
       }
     >
-      <Show when={toolDescription()}>
+      <Show
+        when={rows().length > 0}
+        fallback={
+          <Show when={toolDescription()}>
+            <div data-slot="permission-row">
+              <span data-slot="permission-spacer" aria-hidden="true" />
+              <div data-slot="permission-hint">{toolDescription()}</div>
+            </div>
+          </Show>
+        }
+      >
         <div data-slot="permission-row">
           <span data-slot="permission-spacer" aria-hidden="true" />
-          <div data-slot="permission-hint">{toolDescription()}</div>
-        </div>
-      </Show>
-
-      <Show when={rows().length > 0}>
-        <div data-slot="permission-row">
-          <span data-slot="permission-spacer" aria-hidden="true" />
-          <div data-slot="permission-patterns">
-            <For each={rows()}>
-              {(row, index) => (
-                <div
-                  data-slot="permission-pattern"
-                  data-action={row.action}
-                  data-expanded={expanded[index()] ? "true" : "false"}
-                >
-                  <div data-slot="permission-pattern-row">
-                    <button
-                      type="button"
-                      data-slot="permission-pattern-trigger"
-                      aria-expanded={expanded[index()] ? "true" : "false"}
-                      onClick={() => setExpanded(index(), (v) => !v)}
+          <Collapsible
+            data-slot="permission-disclosure"
+            data-scope="permission"
+            variant="ghost"
+            open={patternsOpen()}
+            onOpenChange={setPatternsOpen}
+          >
+            <Collapsible.Trigger data-slot="permission-disclosure-trigger">
+              <span data-slot="permission-hint">{toolLabel()}</span>
+              <Collapsible.Arrow />
+            </Collapsible.Trigger>
+            <Collapsible.Content>
+              <div data-slot="permission-patterns">
+                <For each={rows()}>
+                  {(row, index) => (
+                    <div
+                      data-slot="permission-pattern"
+                      data-action={row.action}
+                      data-expanded={expanded[index()] ? "true" : "false"}
                     >
-                      <Show
-                        when={row.action === "allow"}
-                        fallback={<Icon name="warning" size="small" data-slot="permission-pattern-icon" />}
-                      >
-                        <Icon name="check-small" size="small" data-slot="permission-pattern-icon" />
-                      </Show>
-                      <code class="text-12-regular text-text-base break-all">{row.pattern}</code>
-                    </button>
-                    <IconButton
-                      data-slot="permission-pattern-copy"
-                      variant="ghost"
-                      size="small"
-                      icon="copy"
-                      aria-label={language.t("ui.permission.copyCommand")}
-                      onClick={(e: MouseEvent) => {
-                        e.stopPropagation()
-                        copy(row.pattern)
-                      }}
-                    />
-                  </div>
-                  <Show when={expanded[index()]}>
-                    <div data-slot="permission-pattern-details">
-                      <div data-slot="permission-pattern-rule">
-                        <Show
-                          when={row.rule}
-                          fallback={
-                            <span data-slot="permission-pattern-rule-empty">
-                              {language.t("ui.permission.noMatchingRule")}
-                            </span>
-                          }
+                      <div data-slot="permission-pattern-row">
+                        <button
+                          type="button"
+                          data-slot="permission-pattern-trigger"
+                          aria-expanded={expanded[index()] ? "true" : "false"}
+                          onClick={() => setExpanded(index(), (v) => !v)}
                         >
-                          {(rule) => (
-                            <>
-                              <span data-slot="permission-pattern-rule-label">
-                                {language.t("ui.permission.matchingRule")}
-                              </span>
-                              <code class="text-12-regular break-all">
-                                {rule().permission} {rule().pattern} → {rule().action}
-                              </code>
-                            </>
-                          )}
-                        </Show>
+                          <Show
+                            when={row.action === "allow"}
+                            fallback={<Icon name="warning" size="small" data-slot="permission-pattern-icon" />}
+                          >
+                            <Icon name="check-small" size="small" data-slot="permission-pattern-icon" />
+                          </Show>
+                          <code class="text-12-regular text-text-base break-all">{row.pattern}</code>
+                        </button>
+                        <IconButton
+                          data-slot="permission-pattern-copy"
+                          variant="ghost"
+                          size="small"
+                          icon="copy"
+                          aria-label={language.t("ui.permission.copyCommand")}
+                          onClick={(e: MouseEvent) => {
+                            e.stopPropagation()
+                            copy(row.pattern)
+                          }}
+                        />
                       </div>
+                      <Show when={expanded[index()]}>
+                        <div data-slot="permission-pattern-details">
+                          <div data-slot="permission-pattern-rule">
+                            <Show
+                              when={row.rule}
+                              fallback={
+                                <span data-slot="permission-pattern-rule-empty">
+                                  {language.t("ui.permission.noMatchingRule")}
+                                </span>
+                              }
+                            >
+                              {(rule) => (
+                                <>
+                                  <span data-slot="permission-pattern-rule-label">
+                                    {language.t("ui.permission.matchingRule")}
+                                  </span>
+                                  <code class="text-12-regular break-all">
+                                    {rule().permission} {rule().pattern} → {rule().action}
+                                  </code>
+                                </>
+                              )}
+                            </Show>
+                          </div>
+                        </div>
+                      </Show>
                     </div>
-                  </Show>
-                </div>
-              )}
-            </For>
-          </div>
+                  )}
+                </For>
+              </div>
+            </Collapsible.Content>
+          </Collapsible>
         </div>
       </Show>
     </DockPrompt>

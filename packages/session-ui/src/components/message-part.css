@@ -792,6 +792,27 @@
     padding: 0;
   }
 
+  [data-slot="permission-disclosure"] {
+    width: 100%;
+    min-width: 0;
+
+    [data-slot="collapsible-trigger"] {
+      height: auto;
+      padding: 0;
+      gap: 6px;
+      justify-content: flex-start;
+
+      [data-slot="permission-hint"] {
+        flex: 1;
+        min-width: 0;
+      }
+
+      [data-slot="collapsible-arrow"] {
+        opacity: 1;
+      }
+    }
+  }
+
   [data-slot="permission-patterns"] {
     display: flex;
     flex-direction: column;
