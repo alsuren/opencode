@@ -19,7 +19,6 @@ import {
   type OpenSessionOptions,
 } from "./home-sessions-controller"
 
-const SHOW_HOME_SESSION_ARCHIVE = false
 const HOME_SECTION_LABEL = "text-v2-text-text-muted [font-weight:440]"
 const HOME_SESSION_SEARCH_RESULTS_ID = "home-session-search-results"
 
@@ -134,7 +133,9 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                     <div
                       class={`flex min-w-0 flex-col gap-px pt-4 ${index() === props.groups().length - 1 ? "" : "mb-6"}`}
                     >
-                      <For each={group.sessions}>{(record) => <HomeSessionRow {...props} record={record} />}</For>
+                      <For each={group.sessions}>
+                        {(record) => <HomeSessionRow {...props} record={record} archive={group.id === "today"} />}
+                      </For>
                     </div>
                   </>
                 )}
@@ -414,7 +415,7 @@ function HomeSessionGroupHeader(props: {
   )
 }
 
-function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
+function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord; archive: boolean }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName() && props.record.projectName
 
@@ -453,7 +454,7 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
           <HomeSessionProjectName name={props.record.projectName} />
         </Show>
       </button>
-      <Show when={SHOW_HOME_SESSION_ARCHIVE}>
+      <Show when={props.archive}>
         <div
           class={`
             hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
