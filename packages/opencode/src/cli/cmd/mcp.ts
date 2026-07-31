@@ -176,6 +176,12 @@ export const McpAuthCommand = effectCmd({
         describe: "name of the MCP server",
         type: "string",
       })
+      .option("yes", {
+        alias: "y",
+        describe: "skip re-authentication confirmation",
+        type: "boolean",
+        default: false,
+      })
       .command(McpAuthListCommand),
   handler: Effect.fn("Cli.mcp.auth")(function* (args) {
     UI.empty()
@@ -239,7 +245,7 @@ export const McpAuthCommand = effectCmd({
 
     // Check if already authenticated
     const authStatus = auth[serverName] ?? (yield* MCP.Service.use((mcp) => mcp.getAuthStatus(serverName)))
-    if (authStatus === "authenticated") {
+    if (authStatus === "authenticated" && !args.yes) {
       const confirm = yield* Effect.promise(() =>
         prompts.confirm({
           message: `${serverName} already has valid credentials. Re-authenticate?`,
