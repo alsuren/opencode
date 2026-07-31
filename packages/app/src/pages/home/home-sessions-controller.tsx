@@ -208,10 +208,8 @@ export function createHomeSessionsController(home: HomeController) {
         const conn = home.server.focused()
         const ctx = home.server.focusedContext()
         if (!conn || !ctx) return
-        const cache = homeSessions()
         const [, setStore] = ctx.sync.child(session.directory)
         if ((await ctx.sdk.protocol) !== "v1") return
-        const archived = Date.now()
         await archiveHomeSession({
           server: ServerConnection.key(conn),
           session,
@@ -219,23 +217,15 @@ export function createHomeSessionsController(home: HomeController) {
             ctx.sdk.client.session.update({
               sessionID,
               directory: session.directory,
-              time: { archived },
+              time: { archived: Date.now() },
             }),
-          remove: () => {
+          remove: () =>
             setStore(
               produce((draft) => {
                 const match = Binary.search(draft.session, session.id, (item) => item.id)
                 if (match.found) draft.session.splice(match.index, 1)
               }),
-            )
-            cache.apply({
-              type: "session.updated",
-              properties: {
-                sessionID: session.id,
-                info: { ...session, time: { ...session.time, archived } },
-              },
-            })
-          },
+            ),
           onError: (cause) =>
             showToast({
               title: language.t("common.requestFailed"),

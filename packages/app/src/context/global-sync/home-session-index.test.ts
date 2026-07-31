@@ -129,20 +129,6 @@ describe("Home V2 session index", () => {
     ).toEqual([created])
   })
 
-  test("removes archived sessions from the loaded index", () => {
-    const initial = parseHomeSessionIndex([session({ id: "active" })])
-
-    expect(
-      applyHomeSessionEvent(initial, {
-        type: "session.updated",
-        properties: {
-          sessionID: initial[0]!.id,
-          info: { ...initial[0]!, time: { ...initial[0]!.time, archived: 10 } },
-        },
-      }),
-    ).toEqual([])
-  })
-
   test("applies only events newer than the index baseline", () => {
     const initial = parseHomeSessionIndex([session({ id: "old" })])
     const stale = { ...initial[0], title: "stale" }
