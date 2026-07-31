@@ -133,9 +133,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
                     <div
                       class={`flex min-w-0 flex-col gap-px pt-4 ${index() === props.groups().length - 1 ? "" : "mb-6"}`}
                     >
-                      <For each={group.sessions}>
-                        {(record) => <HomeSessionRow {...props} record={record} archive={group.id === "today"} />}
-                      </For>
+                      <For each={group.sessions}>{(record) => <HomeSessionRow {...props} record={record} />}</For>
                     </div>
                   </>
                 )}
@@ -415,7 +413,7 @@ function HomeSessionGroupHeader(props: {
   )
 }
 
-function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord; archive: boolean }) {
+function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionRecord }) {
   const title = createMemo(() => sessionTitle(props.record.session.title) || props.record.session.id)
   const showProjectName = () => props.showProjectName() && props.record.projectName
 
@@ -454,29 +452,27 @@ function HomeSessionRow(props: HomeSessionsViewProps & { record: HomeSessionReco
           <HomeSessionProjectName name={props.record.projectName} />
         </Show>
       </button>
-      <Show when={props.archive}>
-        <div
-          class={`
-            hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
-            group-hover/session:opacity-100 focus-within:opacity-100
-          `}
-        >
-          <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
-            <IconButtonV2
-              data-action="home-session-archive"
-              variant="ghost-muted"
-              size="large"
-              icon={<IconV2 name="archive" />}
-              aria-label={props.language.t("common.archive")}
-              onClick={(event) => {
-                event.preventDefault()
-                event.stopPropagation()
-                void props.onArchiveSession(props.record.session)
-              }}
-            />
-          </TooltipV2>
-        </div>
-      </Show>
+      <div
+        class={`
+          hover-reveal absolute right-1.5 top-1/2 flex -translate-y-1/2 items-center gap-1
+          group-hover/session:opacity-100 focus-within:opacity-100
+        `}
+      >
+        <TooltipV2 class="flex shrink-0 items-center" placement="bottom" value={props.language.t("common.archive")}>
+          <IconButtonV2
+            data-action="home-session-archive"
+            variant="ghost-muted"
+            size="large"
+            icon={<IconV2 name="archive" />}
+            aria-label={props.language.t("common.archive")}
+            onClick={(event) => {
+              event.preventDefault()
+              event.stopPropagation()
+              void props.onArchiveSession(props.record.session)
+            }}
+          />
+        </TooltipV2>
+      </div>
     </div>
   )
 }
