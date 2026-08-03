@@ -233,12 +233,14 @@ export const McpAuthCommand = effectCmd({
     const serverConfig = mcpServers[serverName]
     if (!serverConfig) {
       prompts.log.error(`MCP server not found: ${serverName}`)
+      process.exitCode = 1
       prompts.outro("Done")
       return
     }
 
     if (!isMcpRemote(serverConfig) || serverConfig.oauth === false) {
       prompts.log.error(`MCP server ${serverName} is not an OAuth-capable remote server`)
+      process.exitCode = 1
       prompts.outro("Done")
       return
     }
@@ -275,6 +277,7 @@ export const McpAuthCommand = effectCmd({
             spinner.stop("Authentication successful!")
           } else if (status.status === "needs_client_registration") {
             spinner.stop("Authentication failed", 1)
+            process.exitCode = 1
             prompts.log.error(status.error)
             prompts.log.info("Add clientId to your MCP server config:")
             prompts.log.info(`
@@ -290,15 +293,18 @@ export const McpAuthCommand = effectCmd({
   }`)
           } else if (status.status === "failed") {
             spinner.stop("Authentication failed", 1)
+            process.exitCode = 1
             prompts.log.error(status.error)
           } else {
             spinner.stop("Unexpected status: " + status.status, 1)
+            process.exitCode = 1
           }
         }),
       ),
       Effect.catchCause((cause) =>
         Effect.sync(() => {
           spinner.stop("Authentication failed", 1)
+          process.exitCode = 1
           const error = Cause.squash(cause)
           prompts.log.error(error instanceof Error ? error.message : String(error))
         }),
