@@ -11,7 +11,7 @@
 // The `mermaid` package is dynamically imported so it only loads when a
 // diagram actually appears in a session.
 
-type MermaidModule = typeof import("mermaid")["default"]
+type MermaidModule = (typeof import("mermaid"))["default"]
 
 let mermaidLoader: Promise<MermaidModule> | undefined
 
@@ -150,10 +150,7 @@ function paint(el: StatefulElement) {
   toggle.setAttribute("data-variant", "secondary")
   const showingSource = state.mode === "source"
   toggle.textContent = showingSource ? "Diagram" : "Source"
-  toggle.setAttribute(
-    "aria-label",
-    showingSource ? "Show rendered diagram" : "Show diagram source",
-  )
+  toggle.setAttribute("aria-label", showingSource ? "Show rendered diagram" : "Show diagram source")
   toolbar.appendChild(toggle)
 
   const copy = document.createElement("button")
@@ -292,10 +289,17 @@ function attachHandlers(el: StatefulElement) {
   }
 }
 
+// The root can either contain blocks (markdown output) or be one itself (a
+// single block rendered directly by a component).
+function collectBlocks(root: HTMLElement) {
+  const blocks = Array.from(root.querySelectorAll<HTMLElement>('[data-component="mermaid-block"]'))
+  if (root.matches('[data-component="mermaid-block"]')) blocks.unshift(root)
+  return blocks
+}
+
 export function hydrateMermaidBlocks(root: HTMLElement) {
   if (!root) return
-  const blocks = root.querySelectorAll<HTMLElement>('[data-component="mermaid-block"]')
-  for (const el of Array.from(blocks)) {
+  for (const el of collectBlocks(root)) {
     const stateful = el as StatefulElement
     const encoded = el.getAttribute("data-source") ?? ""
     const source = decodeMermaidSource(encoded).trim()
@@ -340,8 +344,7 @@ export function hydrateMermaidBlocks(root: HTMLElement) {
 
 export function teardownMermaidBlocks(root: HTMLElement) {
   if (!root) return
-  const blocks = root.querySelectorAll<HTMLElement>('[data-component="mermaid-block"]')
-  for (const el of Array.from(blocks)) {
+  for (const el of collectBlocks(root)) {
     const stateful = el as StatefulElement
     const cleanup = stateful[CLEANUP_KEY]
     if (cleanup) {

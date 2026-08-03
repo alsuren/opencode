@@ -45,6 +45,7 @@ import { ToolErrorCard } from "./tool-error-card"
 import { Checkbox } from "@opencode-ai/ui/checkbox"
 import { DiffChanges } from "@opencode-ai/ui/diff-changes"
 import { Markdown } from "./markdown"
+import { encodeMermaidSource, hydrateMermaidBlocks, teardownMermaidBlocks } from "@opencode-ai/ui/mermaid"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { getDirectory as _getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { AttachmentCardV2 } from "../v2/components/attachment-card-v2"
@@ -1391,43 +1392,90 @@ export function UserMessageDisplay(props: {
   )
 }
 
-type HighlightSegment = { text: string; type?: "file" | "agent" }
+type HighlightSegment = { text: string; type?: "file" | "agent" | "mermaid"; source?: string }
+
+// Only closed fences render; an unterminated one stays as literal text.
+const MERMAID_FENCE = /^[ \t]{0,3}```[ \t]*mermaid[ \t]*\n([\s\S]*?)\n[ \t]{0,3}```[ \t]*$/gm
 
 function HighlightedText(props: { text: string; references: FilePart[]; agents: AgentPart[] }) {
   const segments = createMemo(() => {
     const text = props.text
 
-    const allRefs: { start: number; end: number; type: "file" | "agent" }[] = [
+    const diagrams = Array.from(text.matchAll(MERMAID_FENCE))
+      .filter((match) => match[1].trim())
+      .map((match) => ({
+        start: match.index,
+        end: match.index + match[0].length,
+        type: "mermaid" as const,
+        source: match[1],
+      }))
+
+    const mentions = [
       ...props.references
         .filter((r) => r.source?.text?.start !== undefined && r.source?.text?.end !== undefined)
         .map((r) => ({ start: r.source!.text!.start, end: r.source!.text!.end, type: "file" as const })),
       ...props.agents
         .filter((a) => a.source?.start !== undefined && a.source?.end !== undefined)
         .map((a) => ({ start: a.source!.start, end: a.source!.end, type: "agent" as const })),
-    ].sort((a, b) => a.start - b.start)
+      // A mention inside a diagram is part of its DSL, not a reference to link.
+    ].filter((mention) => !diagrams.some((d) => mention.start < d.end && mention.end > d.start))
+
+    const spans = [...diagrams, ...mentions].sort((a, b) => a.start - b.start)
 
     const result: HighlightSegment[] = []
     let lastIndex = 0
 
-    for (const ref of allRefs) {
-      if (ref.start < lastIndex) continue
+    for (const span of spans) {
+      if (span.start < lastIndex) continue
 
-      if (ref.start > lastIndex) {
-        result.push({ text: text.slice(lastIndex, ref.start) })
+      if (span.start > lastIndex) {
+        result.push({ text: text.slice(lastIndex, span.start) })
       }
 
-      result.push({ text: text.slice(ref.start, ref.end), type: ref.type })
-      lastIndex = ref.end
+      result.push(
+        span.type === "mermaid"
+          ? { text: "", type: "mermaid", source: span.source }
+          : { text: text.slice(span.start, span.end), type: span.type },
+      )
+      lastIndex = span.end
     }
 
     if (lastIndex < text.length) {
       result.push({ text: text.slice(lastIndex) })
     }
 
-    return result
+    // A fence owns its whole line, so the surrounding newlines would otherwise
+    // show up as blank space around the block.
+    for (const [index, segment] of result.entries()) {
+      if (segment.type !== "mermaid") continue
+      const before = result[index - 1]
+      if (before && !before.type) before.text = before.text.replace(/\n+$/, "")
+      const after = result[index + 1]
+      if (after && !after.type) after.text = after.text.replace(/^\n+/, "")
+    }
+
+    return result.filter((segment) => segment.type || segment.text)
   })
 
-  return <For each={segments()}>{(segment) => <span data-highlight={segment.type}>{segment.text}</span>}</For>
+  return (
+    <For each={segments()}>
+      {(segment) => (
+        <Show
+          when={segment.type === "mermaid" && segment.source}
+          fallback={<span data-highlight={segment.type}>{segment.text}</span>}
+        >
+          {(source) => <MermaidBlock source={source()} />}
+        </Show>
+      )}
+    </For>
+  )
+}
+
+function MermaidBlock(props: { source: string }) {
+  let element!: HTMLDivElement
+  onMount(() => hydrateMermaidBlocks(element))
+  onCleanup(() => teardownMermaidBlocks(element))
+  return <div ref={element} data-component="mermaid-block" data-source={encodeMermaidSource(props.source)} />
 }
 
 export function Part(props: MessagePartProps) {
