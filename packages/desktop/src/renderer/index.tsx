@@ -4,6 +4,7 @@ import {
   ACCEPTED_FILE_EXTENSIONS,
   AppBaseProviders,
   AppInterface,
+  handleNotificationClick,
   loadLocaleDict,
   normalizeLocale,
   type Locale,
@@ -251,18 +252,18 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
       window.api.relaunch()
     },
 
-    notify: async (title, description, onClick) => {
+    notify: async (title, description, href) => {
       const focused = await window.api.getWindowFocused().catch(() => document.hasFocus())
       if (focused) return
 
       const notification = new Notification(title, {
         body: description ?? "",
-        icon: "https://opencode.ai/favicon-96x96-v3.png",
+        icon: "https://opencode.ai/favicon-96x96.png",
       })
       notification.onclick = () => {
         void window.api.showWindow()
         void window.api.setWindowFocus()
-        onClick?.()
+        handleNotificationClick(href)
         notification.close()
       }
     },
