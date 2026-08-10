@@ -49,6 +49,7 @@ import {
   setServerLogger as setNotificationClickServerLogger,
   wasRecentlyTriggeredByNotificationClick,
 } from "@/utils/notification-click"
+import { sessionHref } from "@/utils/session-route"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
@@ -471,7 +472,7 @@ export default function LegacyLayout(props: ParentProps) {
           e.details.type === "permission.asked"
             ? language.t("notification.permission.description", { sessionTitle, projectName })
             : language.t("notification.question.description", { sessionTitle, projectName })
-        const href = `/${base64Encode(directory)}/session/${props.sessionID}`
+        const href = sessionHref(server.key, props.sessionID)
 
         const now = Date.now()
         const lastAlerted = alertedAtBySession.get(sessionKey) ?? 0
