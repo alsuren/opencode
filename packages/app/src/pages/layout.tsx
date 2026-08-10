@@ -575,8 +575,29 @@ export default function LegacyLayout(props: ParentProps) {
     const onFocus = () => {
       const id = params.id
       const directory = currentDir()
-      if (!id || !directory) return
-      if (!platform.dismissNotificationsForSession) return
+      if (!id) return
+      if (!directory) {
+        void serverSDK().client.app
+          .log({
+            service: "app-notification",
+            level: "info",
+            message: "dismissNotificationsForSession skipped - route has no directory",
+            extra: { sessionID: id, source: "window-focus", serverKey: params.serverKey ?? null },
+          })
+          .catch(() => {})
+        return
+      }
+      if (!platform.dismissNotificationsForSession) {
+        void serverSDK().client.app
+          .log({
+            service: "app-notification",
+            level: "warn",
+            message: "dismissNotificationsForSession unavailable",
+            extra: { sessionID: id, source: "window-focus", platform: platform.platform },
+          })
+          .catch(() => {})
+        return
+      }
       void platform
         .dismissNotificationsForSession(id)
         .then((count) =>
@@ -1813,6 +1834,22 @@ export default function LegacyLayout(props: ParentProps) {
       },
       ([ready, slug, id, root, dir]) => {
         if (!ready || !slug || !dir) {
+          if (id) {
+            void serverSDK().client.app
+              .log({
+                service: "app-notification",
+                level: "info",
+                message: "session route not synced",
+                extra: {
+                  sessionID: id,
+                  ready,
+                  hasDirectoryRoute: !!slug,
+                  hasDirectory: !!dir,
+                  serverKey: params.serverKey ?? null,
+                },
+              })
+              .catch(() => {})
+          }
           activeRoute.session = ""
           activeRoute.sessionProject = ""
           activeRoute.directory = ""
