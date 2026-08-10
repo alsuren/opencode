@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { canReusePendingBlock } from "./markdown-projection"
+import { canReusePendingBlock, completedProjection } from "./markdown-projection"
 import { project, stream } from "./markdown-stream"
 
 describe("markdown stream", () => {
@@ -26,6 +26,14 @@ describe("markdown stream", () => {
     expect(stream(text, true)).toEqual([
       { raw: "before\n\n", src: "before\n\n", mode: "full" },
       { raw: "```ts\nconst x = 1\n```", src: "const x = 1", mode: "code", language: "ts", complete: true },
+    ])
+  })
+
+  test("keeps completed Mermaid fences as code blocks after a refresh", () => {
+    expect(completedProjection("before\n\n```mermaid\ngraph TD\n  A --> B\n```\n\nafter").blocks).toEqual([
+      { raw: "before\n\n", src: "before", mode: "full" },
+      { raw: "```mermaid\ngraph TD\n  A --> B\n```\n\n", src: "graph TD\n  A --> B", mode: "code", language: "mermaid", complete: true },
+      { raw: "after", src: "after", mode: "full" },
     ])
   })
 
