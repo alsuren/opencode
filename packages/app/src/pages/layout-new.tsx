@@ -1,4 +1,5 @@
 import { createEffect, Suspense, type ParentProps } from "solid-js"
+import { useParams } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { DebugBar } from "@/components/debug-bar"
 import { TabsInfoPopup } from "@/components/help-button"
@@ -8,9 +9,16 @@ import { setV2Toast, ToastRegion } from "@/utils/toast"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
+  const params = useParams<{ id?: string }>()
   const [state, setState] = createStore({ debugTools: true })
 
   createEffect(() => setV2Toast(true))
+  createEffect(() => {
+    const sessionID = params.id
+    if (!sessionID) return
+    if (!platform.dismissNotificationsForSession) return
+    void platform.dismissNotificationsForSession(sessionID)
+  })
 
   const update: TitlebarUpdate = {
     version: () => {
