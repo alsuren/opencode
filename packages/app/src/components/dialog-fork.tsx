@@ -74,6 +74,10 @@ export const DialogFork: Component = () => {
         dialog.close()
         prompt.set(restored, undefined, { dir, id: forked.id })
         navigate(`/${dir}/session/${forked.id}`)
+        // Kobalte restores focus while the dialog tears down.
+        setTimeout(() => {
+          requestAnimationFrame(() => document.querySelector<HTMLElement>('[data-component="prompt-input"]')?.focus())
+        }, 100)
       })
       .catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err)
