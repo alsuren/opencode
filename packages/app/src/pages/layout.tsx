@@ -564,6 +564,52 @@ export default function LegacyLayout(props: ParentProps) {
 
   useSDKNotificationToasts()
 
+  function dismissNotificationsForSession(sessionID: string, source: string) {
+    if (!platform.dismissNotificationsForSession) {
+      void serverSDK().client.app
+        .log({
+          service: "app-notification",
+          level: "warn",
+          message: "dismissNotificationsForSession unavailable",
+          extra: { sessionID, source, platform: platform.platform },
+        })
+        .catch(() => {})
+      return
+    }
+    void platform
+      .dismissNotificationsForSession(sessionID)
+      .then((count) =>
+        void serverSDK().client.app
+          .log({
+            service: "app-notification",
+            level: "info",
+            message: "dismissNotificationsForSession result",
+            extra: { sessionID, source, dismissed: count },
+          })
+          .catch(() => {}),
+      )
+      .catch((err) =>
+        void serverSDK().client.app
+          .log({
+            service: "app-notification",
+            level: "warn",
+            message: "dismissNotificationsForSession threw",
+            extra: { sessionID, source, error: String(err) },
+          })
+          .catch(() => {}),
+      )
+  }
+
+  createEffect(
+    on(
+      () => params.id,
+      (sessionID) => {
+        if (!sessionID) return
+        dismissNotificationsForSession(sessionID, "session-route")
+      },
+    ),
+  )
+
   // Dismiss OS notifications for the current session when the window
   // regains focus.  Covers the alt-tab-into-browser case where the user
   // is already on the relevant session: syncSessionRoute doesn't fire
@@ -574,52 +620,8 @@ export default function LegacyLayout(props: ParentProps) {
   onMount(() => {
     const onFocus = () => {
       const id = params.id
-      const directory = currentDir()
       if (!id) return
-      if (!directory) {
-        void serverSDK().client.app
-          .log({
-            service: "app-notification",
-            level: "info",
-            message: "dismissNotificationsForSession skipped - route has no directory",
-            extra: { sessionID: id, source: "window-focus", serverKey: params.serverKey ?? null },
-          })
-          .catch(() => {})
-        return
-      }
-      if (!platform.dismissNotificationsForSession) {
-        void serverSDK().client.app
-          .log({
-            service: "app-notification",
-            level: "warn",
-            message: "dismissNotificationsForSession unavailable",
-            extra: { sessionID: id, source: "window-focus", platform: platform.platform },
-          })
-          .catch(() => {})
-        return
-      }
-      void platform
-        .dismissNotificationsForSession(id)
-        .then((count) =>
-          void serverSDK().client.app
-            .log({
-              service: "app-notification",
-              level: "info",
-              message: "dismissNotificationsForSession result",
-              extra: { sessionID: id, source: "window-focus", dismissed: count },
-            })
-            .catch(() => {}),
-        )
-        .catch((err) =>
-          void serverSDK().client.app
-            .log({
-              service: "app-notification",
-              level: "warn",
-              message: "dismissNotificationsForSession threw",
-              extra: { sessionID: id, source: "window-focus", error: String(err) },
-            })
-            .catch(() => {}),
-        )
+      dismissNotificationsForSession(id, "window-focus")
     }
     window.addEventListener("focus", onFocus)
     onCleanup(() => window.removeEventListener("focus", onFocus))
@@ -1300,30 +1302,7 @@ export default function LegacyLayout(props: ParentProps) {
     // Center for this session.  We don't `await` because navigation should
     // not be blocked by SW round-trips; the SDK log call above is similarly
     // fire-and-forget.
-    if (platform.dismissNotificationsForSession) {
-      void platform
-        .dismissNotificationsForSession(id)
-        .then((count) =>
-          void serverSDK().client.app
-            .log({
-              service: "app-notification",
-              level: "info",
-              message: "dismissNotificationsForSession result",
-              extra: { sessionID: id, source, dismissed: count },
-            })
-            .catch(() => {}),
-        )
-        .catch((err) =>
-          void serverSDK().client.app
-            .log({
-              service: "app-notification",
-              level: "warn",
-              message: "dismissNotificationsForSession threw",
-              extra: { sessionID: id, source, error: String(err) },
-            })
-            .catch(() => {}),
-        )
-    }
+    dismissNotificationsForSession(id, source)
     notification.session.markViewed(id, source)
     const expanded = untrack(() => store.workspaceExpanded[directory])
     if (expanded === false) {
