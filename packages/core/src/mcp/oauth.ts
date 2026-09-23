@@ -340,15 +340,23 @@ export const authorize = (input: {
     yield* Effect.logInfo("mcp oauth authorization started", fields)
     const oauth = input.config.oauth || undefined
     const store = memoryStore()
-    // Reuse the client registered by an earlier login; the SDK discards it if the issuer changed.
     const previous = (yield* credentials.list(input.integrationID)).at(-1)?.value
-    if (previous?.type === "oauth") {
-      const client = clientFromCredential(previous)
-      if (client) yield* Effect.promise(() => store.saveClientInformation(client))
-    }
+    const registered = previous?.type === "oauth" ? clientFromCredential(previous) : undefined
     const code = yield* Deferred.make<{ code: string; iss: string | undefined }, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
+    // A dynamically registered client is bound to the loopback port it registered with, and servers such
+    // as Cloudflare Access match redirect URIs exactly, so reuse that port instead of an ephemeral one.
+    const registeredUris =
+      registered && "redirect_uris" in registered && Array.isArray(registered.redirect_uris)
+        ? registered.redirect_uris.filter((uri): uri is string => typeof uri === "string")
+        : []
+    const registeredPort =
+      oauth?.callback_port || redirect
+        ? undefined
+        : registeredUris
+            .map((uri) => URL.parse(uri))
+            .find((url) => url?.hostname === "127.0.0.1" && url.pathname === redirectPath && url.port)?.port
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
 
     // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
@@ -375,20 +383,31 @@ export const authorize = (input: {
       response.writeHead(200, { "Content-Type": "text/html" }).end(OauthCallbackPage.success({ provider: input.name }))
     })
 
-    // callback_port, else the port pinned by redirect_uri, else ephemeral; a mismatch strands the browser.
-    const redirectPort = Number(redirect?.port) || undefined
-    const port = yield* Effect.callback<number, Error>((resume) => {
-      server.once("error", (error) => resume(Effect.fail(error)))
-      server.listen(oauth?.callback_port ?? redirectPort ?? 0, "127.0.0.1", () => {
-        const address = server.address()
-        resume(
-          address && typeof address === "object"
-            ? Effect.succeed(address.port)
-            : Effect.fail(new Error("Could not determine MCP OAuth callback port")),
-        )
+    const listen = (port: number) =>
+      Effect.callback<number, Error>((resume) => {
+        server.once("error", (error) => resume(Effect.fail(error)))
+        server.listen(port, "127.0.0.1", () => {
+          const address = server.address()
+          resume(
+            address && typeof address === "object"
+              ? Effect.succeed(address.port)
+              : Effect.fail(new Error("Could not determine MCP OAuth callback port")),
+          )
+        })
       })
-    })
+    // callback_port, else the port pinned by redirect_uri, else the registered client's port, else
+    // ephemeral; a mismatch strands the browser. A busy registered port falls back to a fresh registration.
+    const redirectPort = Number(redirect?.port) || undefined
+    const port = yield* registeredPort
+      ? listen(Number(registeredPort)).pipe(Effect.catch(() => listen(0)))
+      : listen(oauth?.callback_port ?? redirectPort ?? 0)
     yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
+    const redirectUrl = oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`
+
+    // Reuse the client registered by an earlier login unless it cannot accept this redirect; the SDK
+    // also discards it if the issuer changed.
+    if (registered && (registeredUris.length === 0 || registeredUris.includes(redirectUrl)))
+      yield* Effect.promise(() => store.saveClientInformation(registered))
 
     // The server's 401 names where its resource metadata lives and which scopes it wants; without it
     // discovery can only guess the well-known path, which not every server layout answers.
@@ -439,7 +458,7 @@ export const authorize = (input: {
       clientMetadataUrl: cimd ? CLIENT_METADATA_URL : undefined,
       discovery: { ...discovery, resourceMetadataUrl: resourceMetadataUrl?.toString() },
       redirect: {
-        url: oauth?.redirect_uri ?? `http://127.0.0.1:${port}${redirectPath}`,
+        url: redirectUrl,
         state,
         open: (url) => {
           authorizationUrl = url

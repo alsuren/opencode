@@ -500,6 +500,39 @@ describe("MCP OAuth", () => {
       expect(registrations).toHaveLength(0)
     })
 
+    const registeredStore = (server: ReturnType<typeof Bun.serve>, redirect: string) => {
+      const previous = credential({ access: "a", refresh: "r", url: server.url.href })
+      const client = { client_id: "registered", redirect_uris: [redirect], issuer: server.url.origin }
+      return memoryCredentials([new Credential.Info({ ...previous, value: { ...previous.value, metadata: { client } } })])
+    }
+
+    test("listens on the loopback port the reused client registered", async () => {
+      const { server, registrations } = authorizationServer({})
+      const reservation = Bun.serve({ port: 0, fetch: () => new Response() })
+      const redirect = `http://127.0.0.1:${reservation.port}/callback`
+      reservation.stop(true)
+      const { url } = await Effect.runPromise(
+        Effect.scoped(start(server, undefined, registeredStore(server, redirect))),
+      ).finally(() => server.stop(true))
+      expect(url.searchParams.get("redirect_uri")).toBe(redirect)
+      expect(url.searchParams.get("client_id")).toBe("registered")
+      expect(registrations).toHaveLength(0)
+    })
+
+    test("registers a new client when the registered loopback port is busy", async () => {
+      const { server, registrations } = authorizationServer({})
+      const busy = Bun.serve({ port: 0, hostname: "127.0.0.1", fetch: () => new Response() })
+      const redirect = `http://127.0.0.1:${busy.port}/callback`
+      const { url } = await Effect.runPromise(
+        Effect.scoped(start(server, undefined, registeredStore(server, redirect))),
+      ).finally(() => {
+        busy.stop(true)
+        server.stop(true)
+      })
+      expect(url.searchParams.get("redirect_uri")).not.toBe(redirect)
+      expect(registrations).toHaveLength(1)
+    })
+
     test("registers dynamically when a custom redirect_uri is configured", async () => {
       const { server, registrations } = authorizationServer(cimd)
       const { url } = await Effect.runPromise(
