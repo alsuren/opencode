@@ -34,18 +34,16 @@ export function SessionTabAvatarView(props: {
   loading: boolean
 }) {
   return (
-    <Show
-      when={props.loading}
-      fallback={
-        <ProjectAvatar
-          fallback={displayName(props.project ?? { worktree: props.directory })}
-          src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
-          variant={getProjectAvatarVariant(props.project?.icon?.color)}
-          unread={props.unread}
-        />
-      }
-    >
-      <SessionProgressIndicatorV2 />
-    </Show>
+    <span class="relative block size-4 shrink-0">
+      <ProjectAvatar
+        fallback={displayName(props.project ?? { worktree: props.directory })}
+        src={getProjectAvatarSource(props.project?.id, props.project?.icon)}
+        variant={getProjectAvatarVariant(props.project?.icon?.color)}
+        unread={props.unread}
+      />
+      <Show when={props.loading}>
+        <SessionProgressIndicatorV2 class="pointer-events-none absolute inset-0 opacity-60" />
+      </Show>
+    </span>
   )
 }
