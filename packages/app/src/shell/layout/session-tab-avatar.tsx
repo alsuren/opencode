@@ -42,7 +42,7 @@ export function SessionTabAvatarView(props: {
         unread={props.unread}
       />
       <Show when={props.loading}>
-        <SessionProgressIndicatorV2 class="pointer-events-none absolute inset-0 opacity-60" />
+        <SessionProgressIndicatorV2 class="pointer-events-none absolute inset-0 opacity-70" />
       </Show>
     </span>
   )
