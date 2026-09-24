@@ -63,6 +63,7 @@ Actions and resources use simple whole-value wildcards:
 | ------- | ------------------------------------------ |
 | `*`     | Zero or more characters, including `/`    |
 | `?`     | Exactly one character                     |
+| `<arg>` | One non-whitespace token                  |
 | Other   | The literal character                     |
 
 ```jsonc
@@ -83,6 +84,10 @@ A shell pattern ending in ` *` also matches the command without arguments:
 ```
 
 This matches both `git status` and `git status --short`.
+
+Use `<arg>` to skip exactly one shell argument. For example,
+`timeout <arg> npm test *` matches `timeout 60 npm test` but not
+`timeout -s KILL 60 npm test`.
 
 OpenCode combines rules in order and uses the last match. Lower-priority
 configuration is loaded first, global rules are appended next, and agent rules

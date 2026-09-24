@@ -7,6 +7,8 @@ export function match(input: string, pattern: string) {
     .replace(/[.+^${}()|[\]\\]/g, "\\$&")
     .replace(/\*/g, ".*")
     .replace(/\?/g, ".")
+    // "<arg>" contains no escaped metacharacters, so it survives the passes above intact.
+    .replaceAll("<arg>", "\\S+")
 
   if (escaped.endsWith(" .*")) escaped = escaped.slice(0, -3) + "( .*)?"
 
