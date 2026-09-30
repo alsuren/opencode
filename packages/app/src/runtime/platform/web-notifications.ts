@@ -1,6 +1,9 @@
 import type { Platform } from "./platform"
 
 const CLICK_MESSAGE = "opencode.notification.click"
+const OWNER_MESSAGE = "opencode.notification.owner"
+const PING_MESSAGE = "opencode.notification.ping"
+const PING_TIMEOUT_MS = 1000
 const ICON = "https://opencode.ai/favicon-96x96-v3.png"
 
 // Notifications shown through the service worker registration can be listed and
@@ -15,8 +18,13 @@ export function createWebNotifications(): Pick<Platform, "notify" | "closeNotifi
     navigator.serviceWorker.addEventListener("message", (event: MessageEvent<unknown>) => {
       const message = event.data
       if (typeof message !== "object" || message === null) return
-      if (!("type" in message) || message.type !== CLICK_MESSAGE) return
       if (!("id" in message) || typeof message.id !== "string") return
+      if (!("type" in message)) return
+      if (message.type === OWNER_MESSAGE) {
+        event.ports[0]?.postMessage(clicks.has(message.id))
+        return
+      }
+      if (message.type !== CLICK_MESSAGE) return
       const onClick = clicks.get(message.id)
       if (!onClick) return
       clicks.delete(message.id)
@@ -37,10 +45,14 @@ export function createWebNotifications(): Pick<Platform, "notify" | "closeNotifi
       if (permission !== "granted") return
       if (document.visibilityState === "visible" && document.hasFocus()) return
 
-      const registration = await activeRegistration()
+      const registration = await clickableRegistration()
       if (registration) {
-        const id = tag ?? crypto.randomUUID()
-        clicks.delete(id)
+        // Unique per notification: another tab may later replace this tag and must own the click.
+        const id = crypto.randomUUID()
+        if (tag) {
+          const replaced = await registration.getNotifications({ tag }).catch(() => [])
+          replaced.forEach((notification) => clicks.delete(notification.data?.opencodeNotificationID))
+        }
         if (onClick) clicks.set(id, onClick)
         const options = {
           body: description ?? "",
@@ -76,7 +88,8 @@ export function createWebNotifications(): Pick<Platform, "notify" | "closeNotifi
       notifications
         .filter((notification) => match(notification.tag))
         .forEach((notification) => {
-          clicks.delete(notification.tag)
+          const id: unknown = notification.data?.opencodeNotificationID
+          if (typeof id === "string") clicks.delete(id)
           notification.close()
         })
     },
@@ -88,4 +101,29 @@ async function activeRegistration() {
   const registration = await navigator.serviceWorker.getRegistration().catch(() => undefined)
   if (!registration?.active) return undefined
   return registration
+}
+
+// A worker from an older build keeps control until every tab closes and has no
+// click handler, so only route notifications through workers that answer a ping.
+const handlesClicks = new WeakMap<ServiceWorker, Promise<boolean>>()
+
+async function clickableRegistration() {
+  const registration = await activeRegistration()
+  const worker = registration?.active
+  if (!registration || !worker) return undefined
+  const cached = handlesClicks.get(worker) ?? pingWorker(worker)
+  handlesClicks.set(worker, cached)
+  return (await cached) ? registration : undefined
+}
+
+function pingWorker(worker: ServiceWorker) {
+  return new Promise<boolean>((resolve) => {
+    const channel = new MessageChannel()
+    const timer = setTimeout(() => resolve(false), PING_TIMEOUT_MS)
+    channel.port1.onmessage = () => {
+      clearTimeout(timer)
+      resolve(true)
+    }
+    worker.postMessage({ type: PING_MESSAGE }, [channel.port2])
+  })
 }

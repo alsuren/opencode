@@ -401,3 +401,18 @@ test("the production build precaches every deployable file", async ({ page, cont
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())))
   }
 })
+
+fixture("installs the notification click handler with the generated worker", async ({ page, site }) => {
+  await install(page, site.url)
+  const answered = await page.evaluate(async () => {
+    const worker = (await navigator.serviceWorker.ready).active
+    if (!worker) throw new Error("Missing active worker")
+    const channel = new MessageChannel()
+    const reply = new Promise<unknown>((resolve) => {
+      channel.port1.onmessage = (event) => resolve(event.data)
+    })
+    worker.postMessage({ type: "opencode.notification.ping" }, [channel.port2])
+    return reply
+  })
+  expect(answered).toBe(true)
+})
