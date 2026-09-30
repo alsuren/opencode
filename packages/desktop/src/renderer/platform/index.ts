@@ -5,7 +5,7 @@ import { windowFullscreen } from "../window/fullscreen"
 import { DragCancelEvent } from "../../shared/ipc-transport"
 import { createDesktopFiles } from "./files"
 import { createDesktopMenuAction } from "./menu"
-import { createDesktopNotify } from "./notifications"
+import { createDesktopNotifications } from "./notifications"
 import { createDesktopStorage } from "./storage"
 
 export type DesktopWindowState = {
@@ -64,7 +64,7 @@ export function createDesktopPlatform(
     setForceFocus: (enabled) => api.setForceFocus(enabled),
     recordFatalRendererError: (error) => api.recordFatalRendererError(error),
     restart: async () => api.relaunch(),
-    notify: createDesktopNotify(api),
+    ...createDesktopNotifications(api),
     fetch: (input, init) => {
       if (input instanceof Request) return fetch(input)
       return fetch(input, init)

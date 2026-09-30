@@ -5,6 +5,8 @@ import { type Accessor, batch, createEffect, createMemo, createRoot, getOwner, o
 import { createSimpleContext } from "@opencode/ui/context"
 import type { ServerSDK } from "@/runtime/server/client"
 import type { Data } from "@opencode/client/solid"
+import type { PermissionRequest } from "@opencode/client/promise"
+import { getFilename } from "@opencode/util/path"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
@@ -242,8 +244,11 @@ export function createServerNotificationState(input: {
 
       if (settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.responseReady.title"),
+            session.title ?? sessionID,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            `${sessionID}:response-ready`,
           ),
         )
       }
@@ -272,15 +277,59 @@ export function createServerNotificationState(input: {
         (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
       if (settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.error.title"), description, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.error.title"),
+            description,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            `${sessionID}:error`,
           ),
         )
       }
     })
   }
 
+  // Subagent permission requests surface in the root session's dock, so notify for the root.
+  const lookupRoot = async (sessionID: string, depth = 0): Promise<Awaited<ReturnType<typeof lookup>>> => {
+    const session = await lookup(sessionID)
+    if (!session?.parentID || depth >= 10) return session
+    return (await lookupRoot(session.parentID, depth + 1)) ?? session
+  }
+
+  const handlePermissionAsked = (request: PermissionRequest, eventID: string) => {
+    if (settings.permissions.autoApprove()) return
+    void lookupRoot(request.sessionID).then((session) => {
+      if (meta.disposed) return
+      if (!session) return
+
+      if (sessionIDHasOpenTab(tabs.store, input.key, session.id) && settings.sounds.permissionsEnabled()) {
+        void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.permissions()))
+      }
+
+      if (!settings.notifications.permissions()) return
+      void input.coordinator.system(`${input.key}\0${eventID}`, () =>
+        platform.notify(
+          language.t("notification.permission.title"),
+          language.t("notification.permission.description", {
+            sessionTitle: session.title ?? session.id,
+            projectName: getFilename(session.location.directory),
+          }),
+          () => openNotificationSession(tabs, input.key, session.id),
+          `${session.id}:permission:${request.id}`,
+        ),
+      )
+    })
+  }
+
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "permission.asked") {
+      handlePermissionAsked(event.data, event.id)
+      return
+    }
+    if (event.type === "permission.replied") {
+      const suffix = `:permission:${event.data.requestID}`
+      void platform.closeNotifications?.((tag) => tag.endsWith(suffix))
+      return
+    }
     if (event.type !== "session.execution.succeeded" && event.type !== "session.execution.failed") return
 
     const time = Date.now()
@@ -309,6 +358,10 @@ export function createServerNotificationState(input: {
       },
       unseenHasError(session: string) {
         return index.session.unseenHasError[session] ?? false
+      },
+      closeSystemNotifications(session: string) {
+        const prefix = `${session}:`
+        return platform.closeNotifications?.((tag) => tag.startsWith(prefix))
       },
       markViewed(session: string) {
         const unseen = index.session.unseen[session] ?? empty

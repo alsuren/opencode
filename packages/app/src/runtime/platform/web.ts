@@ -1,6 +1,7 @@
 import { createBrowserDraftStore } from "@/runtime/persistence/drafts"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { Platform } from "./platform"
+import { createWebNotifications } from "./web-notifications"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -18,26 +19,7 @@ export function createWebPlatform(version: string) {
       window.open(url.href, "_blank", "noopener,noreferrer")
     },
     restart: async () => window.location.reload(),
-    async notify(title, description, onClick) {
-      if (!("Notification" in window)) return
-
-      const permission =
-        Notification.permission === "default"
-          ? await Notification.requestPermission().catch(() => "denied")
-          : Notification.permission
-      if (permission !== "granted") return
-      if (document.visibilityState === "visible" && document.hasFocus()) return
-
-      const notification = new Notification(title, {
-        body: description ?? "",
-        icon: "https://opencode.ai/favicon-96x96-v3.png",
-      })
-      notification.onclick = () => {
-        window.focus()
-        onClick?.()
-        notification.close()
-      }
-    },
+    ...createWebNotifications(),
     getDefaultServer: async () => {
       const stored = readDefaultServerUrl()
       return stored ? ServerConnection.Key.make(stored) : null

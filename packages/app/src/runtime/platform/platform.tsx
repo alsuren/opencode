@@ -56,8 +56,11 @@ type PlatformBase = {
   /** Restart the app  */
   restart(): Promise<void>
 
-  /** Send a system notification */
-  notify(title: string, description?: string, onClick?: () => void): Promise<void>
+  /** Send a system notification. A notification replaces any earlier one with the same tag. */
+  notify(title: string, description?: string, onClick?: () => void, tag?: string): Promise<void>
+
+  /** Close system notifications whose tag matches */
+  closeNotifications?(match: (tag: string) => boolean): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
   openAttachmentPickerDialog?(

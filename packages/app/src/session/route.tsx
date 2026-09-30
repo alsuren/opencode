@@ -1,4 +1,4 @@
-import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { ErrorBoundary, createEffect, createMemo, onCleanup, Show, type ParentProps } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { DataProvider } from "@opencode/session-ui/context"
 import { SessionUserMessage } from "@opencode/session-ui/message"
@@ -191,6 +191,21 @@ function MarkSessionNotificationsViewed(props: { sessionID: () => string | undef
     if (!notification.ready() || !sessionID) return
     if (notification.session.unseenCount(sessionID) === 0) return
     notification.session.markViewed(sessionID)
+  })
+  createEffect(() => {
+    const sessionID = props.sessionID()
+    if (!sessionID) return
+    const close = () => {
+      if (document.visibilityState !== "visible") return
+      void notification.session.closeSystemNotifications(sessionID)
+    }
+    close()
+    window.addEventListener("focus", close)
+    document.addEventListener("visibilitychange", close)
+    onCleanup(() => {
+      window.removeEventListener("focus", close)
+      document.removeEventListener("visibilitychange", close)
+    })
   })
   return null
 }
