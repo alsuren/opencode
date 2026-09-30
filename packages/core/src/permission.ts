@@ -174,8 +174,14 @@ const layer = Layer.effect(
       const rules = yield* configured(input.sessionID, input.agent)
       if (denied(input, rules)) return { effect: "deny" as const, rules }
       const all = [...rules, ...(yield* savedRules())]
-      const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
-      const effect: Permission.Effect = effects.includes("ask") ? "ask" : "allow"
+      // Unlike evaluate(), keep whether a real rule matched so clients can show it per resource.
+      const evaluations = input.resources.map((resource): Permission.Evaluation => {
+        const rule = all.findLast(
+          (rule) => Wildcard.match(input.action, rule.action) && Wildcard.match(resource, rule.resource),
+        )
+        return { resource, effect: rule?.effect ?? "ask", rule }
+      })
+      const effect: Permission.Effect = evaluations.some((item) => item.effect === "ask") ? "ask" : "allow"
       const event = yield* hooks.trigger("permission", "evaluate", {
         sessionID: input.sessionID,
         agent: input.agent,
@@ -185,19 +191,23 @@ const layer = Layer.effect(
         source: input.source,
         effect,
       })
-      return { effect: event.effect, message: event.message, rules: all }
+      return { effect: event.effect, message: event.message, rules: all, evaluations }
     })
 
-    function request(input: AssertInput, message?: string): Request {
+    function request(
+      input: AssertInput,
+      result: { message?: string; evaluations?: ReadonlyArray<Permission.Evaluation> },
+    ): Request {
       return {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
+        evaluations: result.evaluations,
         save: input.save,
         metadata: input.metadata,
         source: input.source,
-        message,
+        message: result.message,
       }
     }
 
@@ -223,7 +233,7 @@ const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
       const result = yield* evaluateInput(input)
-      const value = request(input, result.message)
+      const value = request(input, result)
       if (result.effect === "ask") yield* create(value, input.agent)
       return { id: value.id, effect: result.effect }
     })
@@ -243,7 +253,7 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const item = yield* create(request(input, result.message), input.agent)
+            const item = yield* create(request(input, result), input.agent)
             return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline

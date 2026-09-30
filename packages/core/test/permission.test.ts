@@ -273,6 +273,18 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("reports the matched rule for each asked resource", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "bash", resource: "git *", effect: "allow" }])
+      const { service, request } = yield* waitForRequest({ action: "bash", resources: ["git status", "rm -rf x"] })
+      expect(request.evaluations).toEqual([
+        { resource: "git status", effect: "allow", rule: { action: "bash", resource: "git *", effect: "allow" } },
+        { resource: "rm -rf x", effect: "ask" },
+      ])
+      expect(yield* service.get(request.id)).toEqual(request)
+    }),
+  )
+
   it.effect("resolves an asked permission once", () =>
     Effect.gen(function* () {
       yield* setup()

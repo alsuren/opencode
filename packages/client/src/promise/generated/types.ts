@@ -1523,35 +1523,6 @@ export type ProjectUpdated = {
   }
 }
 
-export type PermissionRequest = {
-  id: string
-  sessionID: string
-  action: string
-  resources: Array<string>
-  save?: Array<string>
-  metadata?: { [x: string]: JsonValue }
-  source?: PermissionSource
-  message?: string
-}
-
-export type PermissionAsked = {
-  id: string
-  created: number
-  metadata?: { [x: string]: any }
-  type: "permission.asked"
-  location?: LocationRef
-  data: {
-    id: string
-    sessionID: string
-    action: string
-    resources: Array<string>
-    save?: Array<string>
-    metadata?: { [x: string]: any }
-    source?: PermissionSource
-    message?: string
-  }
-}
-
 export type PermissionReplied = {
   id: string
   created: number
@@ -1717,6 +1688,8 @@ export type ProviderInfo = {
 }
 
 export type PermissionRuleset = Array<PermissionRule>
+
+export type PermissionEvaluation = { resource: string; effect: PermissionEffect; rule?: PermissionRule }
 
 export type SessionRevertStaged = {
   id: string
@@ -2188,6 +2161,37 @@ export type ConfigEntry =
       }
     }
   | { type: "directory"; path: string }
+
+export type PermissionRequest = {
+  id: string
+  sessionID: string
+  action: string
+  resources: Array<string>
+  evaluations?: Array<PermissionEvaluation>
+  save?: Array<string>
+  metadata?: { [x: string]: JsonValue }
+  source?: PermissionSource
+  message?: string
+}
+
+export type PermissionAsked = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "permission.asked"
+  location?: LocationRef
+  data: {
+    id: string
+    sessionID: string
+    action: string
+    resources: Array<string>
+    evaluations?: Array<PermissionEvaluation>
+    save?: Array<string>
+    metadata?: { [x: string]: any }
+    source?: PermissionSource
+    message?: string
+  }
+}
 
 export type SessionInboxUser = {
   id: string

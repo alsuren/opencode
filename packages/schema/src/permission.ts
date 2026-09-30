@@ -22,10 +22,32 @@ export const Source = Schema.Union([
 ]).annotate({ identifier: "Permission.Source" })
 export type Source = typeof Source.Type
 
+export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "Permission.Effect" })
+export type Effect = typeof Effect.Type
+
+export interface Rule extends Schema.Schema.Type<typeof Rule> {}
+export const Rule = Schema.Struct({
+  action: Schema.String,
+  resource: Schema.String,
+  effect: Effect,
+}).annotate({ identifier: "Permission.Rule" })
+
+export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
+export type Ruleset = typeof Ruleset.Type
+
+/** How one requested resource was evaluated; `rule` is absent when no rule matched and the default ask applied. */
+export interface Evaluation extends Schema.Schema.Type<typeof Evaluation> {}
+export const Evaluation = Schema.Struct({
+  resource: Schema.String,
+  effect: Effect,
+  rule: Rule.pipe(optional),
+}).annotate({ identifier: "Permission.Evaluation" })
+
 const RequestFields = {
   sessionID: SessionID,
   action: Schema.String,
   resources: Schema.Array(Schema.String),
+  evaluations: Schema.Array(Evaluation).pipe(optional),
   save: Schema.Array(Schema.String).pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   source: Source.pipe(optional),
@@ -51,16 +73,3 @@ const Replied = ephemeral({
   },
 })
 export const Event = { Asked, Replied, Definitions: inventory(Asked, Replied) }
-
-export const Effect = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "Permission.Effect" })
-export type Effect = typeof Effect.Type
-
-export interface Rule extends Schema.Schema.Type<typeof Rule> {}
-export const Rule = Schema.Struct({
-  action: Schema.String,
-  resource: Schema.String,
-  effect: Effect,
-}).annotate({ identifier: "Permission.Rule" })
-
-export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
-export type Ruleset = typeof Ruleset.Type
