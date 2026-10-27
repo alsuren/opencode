@@ -12,7 +12,6 @@ import { ConsoleAccess } from "../../console-access.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
-import { ManagedPolicy } from "../../managed-policy.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
 
@@ -143,9 +142,7 @@ function oauth(http: HttpClient.HttpClient) {
   } satisfies IntegrationOAuthMethodRegistration
 }
 
-export const OpencodePlugin = define<
-  HttpClient.HttpClient | Bus.Service | Config.Service | ManagedPolicy.Service | Scope.Scope
->({
+export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Config.Service | Scope.Scope>({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const disableFree = ["1", "true"].includes(process.env.OPENCODE_DISABLE_FREE_MODELS?.toLowerCase() ?? "")
@@ -154,7 +151,6 @@ export const OpencodePlugin = define<
     // Every request here goes to the Console, which reads the User-Agent to tell which OpenCode a member runs
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
-    const managed = yield* ManagedPolicy.Service
     const config = yield* Config.Service
     const scope = yield* Scope.Scope
     const loading = Semaphore.makeUnsafe(1)
@@ -222,7 +218,6 @@ export const OpencodePlugin = define<
     })
     // Policies and providers ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
     const publish = Effect.fnUntraced(function* (next: typeof snapshot) {
-      yield* managed.set({ statements: [], organization: next.organization })
       // The config merges as one integration document, which config loads right after managed policies.
       yield* integrate(
         next.remote &&
