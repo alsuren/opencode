@@ -355,11 +355,18 @@ export const OpencodePlugin = define<
         })
       }
     })
-    // Like any search plugin, the Console's provider is available whenever it is connected; the Console's config
-    // selects it as the default through config, where the user's own selection wins.
+    // The Console's config selects its provider only when the workspace enabled hosted search and the member's policy
+    // allows it; otherwise its searches fail, so the provider is offered only then. The selection still merges as
+    // config, where the user's own choice wins.
     yield* ctx.websearch.transform((editor) => {
-      if (snapshot.remote?.type === "config" && snapshot.connection)
-        editor.add(search(WebSearch.ID.make("opencode"), snapshot.connection))
+      const provider = WebSearch.ID.make("opencode")
+      if (
+        snapshot.remote?.type === "config" &&
+        snapshot.remote.info.websearch &&
+        snapshot.remote.info.websearch.provider === provider &&
+        snapshot.connection
+      )
+        editor.add(search(provider, snapshot.connection))
     })
 
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {

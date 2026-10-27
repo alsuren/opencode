@@ -2318,7 +2318,7 @@ describe("OpencodePlugin with a Console config", () => {
     ),
   )
 
-  it.effect("registers Console web search without forcing it, so config selects it and user config wins", () =>
+  it.effect("offers Console web search only when the Console selects it, and user config still wins", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const state = { selected: false }
@@ -2354,13 +2354,15 @@ describe("OpencodePlugin with a Console config", () => {
           const host = yield* PluginHost.make(yield* Plugin.Service)
           yield* OpencodePlugin.effect(host).pipe(inProcess(server))
           yield* ConfigWebSearchPlugin.Plugin.effect(host)
-          expect(yield* websearch.providers()).toContainEqual(opencode)
+          // A workspace without hosted search, or a member its policy denies, would get only failed searches.
+          expect(yield* websearch.providers()).not.toContainEqual(opencode)
           expect(yield* websearch.default()).toBeUndefined()
 
           state.selected = true
           yield* TestClock.adjust("1 minute")
           yield* drain
           expect(yield* announced(opencode)).toEqual(opencode)
+          expect(yield* websearch.providers()).toContainEqual(opencode)
           expect((yield* websearch.query({ query: "console" })).providerID).toBe(opencode.id)
 
           yield* config.setEntries([
