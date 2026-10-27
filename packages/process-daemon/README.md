@@ -44,10 +44,17 @@ directory, `${XDG_STATE_HOME:-~/.local/state}/opencode/pty`. Names are a single
 path component of letters, digits, `.`, `_`, or `-`. The registration
 (`service.json`) and lock (`service.lock`) live in that directory. They only
 default to a temporary directory when no home directory exists, because macOS deletes unaccessed regular files
-there after three days. The socket stays under `/tmp/opencode-pty-<uid>/` to fit
+there after three days. The socket defaults to `/tmp/opencode-pty-<uid>/` to fit
 socket path limits; temporary cleaners skip sockets. A stopping daemon removes
 its own files and runtime directory, and a starting daemon removes abandoned
 sibling runtime directories older than ten minutes.
+
+On Unix, set `OPENCODE_PTY_SOCKET_DIR` to use a different socket directory. The
+value must be an absolute path without `..` components. Sockets go in an
+`opencode-pty-<uid>` child of that directory, which gets the existing ownership
+and symlink checks and mode `0700`; the directory itself is left unchanged.
+Socket path length limits still apply. Registration and lock files continue to
+use the runtime directory.
 
 ### Local transport boundary
 
